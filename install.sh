@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+# Liquid Glass for Omarchy — installer.
+#
+#   git clone https://github.com/fasi96/omarchy-liquid-glass
+#   cd omarchy-liquid-glass && ./install.sh
+#
+# What it does (everything it adds to your config is fenced with
+# "omarchy-liquid-glass" markers, and ./uninstall.sh removes exactly that):
+#   1. installs the HyprGlass Liquid plugin with hyprpm (replaces upstream HyprGlass if present)
+#   2. installs Glass Tuner to ~/.local/share/omarchy-liquid-glass (Super+Ctrl+G, or the app launcher)
+#   3. adds to ~/.config/hypr: liquid_glass.lua (generated) + a require, a login line that loads
+#      hyprpm plugins, and the Super+Ctrl+G binding
+#   4. makes foot see-through (alpha) so the glass shows, and applies the shipped look
+#   5. installs a theme-set hook so terminal text keeps following your theme
+# Backups of every file it touches go to ~/.config/omarchy-liquid-glass/backup-<time>/.
+
+set -euo pipefail
+
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEST="$HOME/.local/share/omarchy-liquid-glass"
+CONF="$HOME/.config/omarchy-liquid-glass"
+HYPR="$HOME/.config/hypr"
+FOOT="$HOME/.config/foot/foot.ini"
+HOOK="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-liquid-glass"
+DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"
+PLUGIN_REPO="https://github.com/fasi96/hyprglass"
+TESTED_HYPRLAND="0.56.2"
+BEGIN="omarchy-liquid-glass >>>"
+END="<<< omarchy-liquid-glass"
+
+say()  { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m!!\033[0m %s\n' "$*"; }
+die()  { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit 1; }
+
+# add_block FILE COMMENT_PREFIX CONTENT — append a fenced block once (replace it if already there)
+add_block() {
+    local file=$1 c=$2 content=$3
+    mkdir -p "$(dirname "$file")"; touch "$file"
+    remove_block "$file" "$c"
+    printf '\n%s %s\n%s\n%s %s\n' "$c" "$BEGIN" "$content" "$c" "$END" >> "$file"
+}
+remove_block() {
+    local file=$1 c=$2
+    [ -f "$file" ] || return 0
+    python3 - "$file" "$c $BEGIN" "$c $END" <<'EOF'
+import re, sys
+path, begin, end = sys.argv[1:4]
+s = open(path).read()
+s = re.sub(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "\n", s, flags=re.S)
+open(path, "w").write(s)
+EOF
+}
+
+# ---------------------------------------------------------------- checks
+for c in hyprctl hyprpm python3 jq chromium foot; do
+    command -v "$c" >/dev/null || die "missing: $c"
+done
+[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || die "run this inside your Hyprland session"
+[ -d "${OMARCHY_PATH:-/usr/share/omarchy}" ] || warn "Omarchy not found: the config hooks assume Omarchy's layout (~/.config/hypr/*.lua with the o helper)"
+
+ver=$(hyprctl version -j | jq -r .tag | sed 's/^v//')
+[ "$ver" = "$TESTED_HYPRLAND" ] || warn "Hyprland $ver: tested on $TESTED_HYPRLAND only; the plugin may not build on other versions"
+
+term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
+case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
+
+# ---------------------------------------------------------------- backups
+BK="$CONF/backup-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$BK"
+for f in "$HYPR/hyprland.lua" "$HYPR/bindings.lua" "$HYPR/autostart.lua" "$FOOT"; do
+    [ -f "$f" ] && cp "$f" "$BK/"
+done
+say "backups in $BK"
+
+# ---------------------------------------------------------------- plugin
+if [ -n "${LG_SKIP_PLUGIN:-}" ]; then say "LG_SKIP_PLUGIN set: skipping the plugin step (testing)"; else
+say "installing build tools for hyprpm (sudo)"
+sudo pacman -S --needed --noconfirm base-devel cmake meson cpio pkgconf git >/dev/null
+
+say "hyprpm: fetching Hyprland headers (can take a few minutes)"
+hyprpm update
+
+if hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q "Repository HyprGlass "; then
+    say "removing upstream HyprGlass (this fork replaces it)"
+    hyprpm remove HyprGlass
+fi
+if ! hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q "Repository HyprGlassLiquid"; then
+    say "hyprpm: adding HyprGlass Liquid"
+    hyprpm add "$PLUGIN_REPO"
+fi
+hyprpm enable hyprglass
+hyprpm reload -n
+fi
+
+# ---------------------------------------------------------------- files
+say "installing Glass Tuner"
+mkdir -p "$DEST" "$CONF"
+cp -r "$SRC/tuner" "$SRC/defaults.json" "$DEST/"
+[ -f "$CONF/state.json" ] || cp "$SRC/defaults.json" "$CONF/state.json"
+[ -f "$CONF/looks.json" ] || cp "$SRC/looks-default.json" "$CONF/looks.json"
+
+cat > "$DESKTOP" <<EOF
+[Desktop Entry]
+Name=Glass Tuner
+Comment=Live sliders for Liquid Glass and the window look
+Keywords=glass;liquid;blur;transparency;refraction;look;appearance;window;
+Exec=python3 $DEST/tuner/tuner.py
+Icon=preferences-desktop-theme
+Type=Application
+Categories=Settings;
+EOF
+
+# ---------------------------------------------------------------- hypr config
+say "hooking into ~/.config/hypr"
+add_block "$HYPR/hyprland.lua" "--" '-- Liquid Glass: glass on terminals + the window look (generated by Glass Tuner)
+require("hypr.liquid_glass")'
+add_block "$HYPR/autostart.lua" "--" '-- load hyprpm plugins (HyprGlass Liquid), then re-read the config so liquid_glass.lua sees it
+o.launch_on_start("sh -c '"'"'hyprpm reload -n; hyprctl reload'"'"'")'
+add_block "$HYPR/bindings.lua" "--" "o.bind(\"SUPER + CTRL + G\", \"Glass Tuner\", \"python3 $DEST/tuner/tuner.py\")"
+
+# ---------------------------------------------------------------- foot
+say "making foot see-through"
+# remember the original padding (Glass Tuner changes it) so uninstall can put it back
+[ -f "$CONF/foot-pad.orig" ] || grep -m1 '^pad=' "$FOOT" > "$CONF/foot-pad.orig" 2>/dev/null || true
+grep -q '^pad=' "$FOOT" 2>/dev/null || add_block "$FOOT" "#" '[main]
+pad=14x14'
+add_block "$FOOT" "#" '# Liquid Glass: see-through terminal background, so the glass shows (Glass Tuner manages this)
+[colors-dark]
+alpha=0.25'
+
+# ---------------------------------------------------------------- look + hook
+say "applying the Liquid Glass look"
+python3 "$DEST/tuner/tuner.py" --save
+
+mkdir -p "$(dirname "$HOOK")"
+cat > "$HOOK" <<EOF
+#!/bin/bash
+# omarchy-liquid-glass: keep terminal text following the new theme
+python3 "$DEST/tuner/tuner.py" --theme-hook
+EOF
+chmod +x "$HOOK"
+
+errs=$(hyprctl configerrors)
+[ -z "$errs" ] || warn "Hyprland reports config errors:\n$errs"
+
+say "done. Open Glass Tuner with Super+Ctrl+G (or search \"Glass Tuner\")."
+say "open a new terminal to see the glass. Uninstall: ./uninstall.sh"
