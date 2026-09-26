@@ -644,6 +644,13 @@ def theme_hook():
 def main():
     if "--theme-hook" in sys.argv:
         return theme_hook()
+    if "--toggle" in sys.argv:        # bar button: glass on/off, saved so it sticks
+        s = load_state()
+        s["glass_on"] = not s["glass_on"]
+        errs = save(s)
+        apply(s)
+        print(errs or ("glass on" if s["glass_on"] else "glass off"))
+        return
     if "--save" in sys.argv:          # installer: write the config from the saved (or shipped) look
         errs = save(load_state())
         print(errs or "saved")

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.fasi96.liquid-glass",
+  "name": "Liquid Glass",
+  "version": "1.0.0",
+  "author": "fasi96",
+  "license": "MIT",
+  "description": "Apple-style Liquid Glass for your terminals: thick glass edges that bend what's behind them and catch the light as you move, a slow oil film, and Glass Tuner to adjust all of it live. The bar button sets it up on first click (it builds a Hyprland plugin with hyprpm, so it asks for your password), then opens the tuner.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "omarchy/BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Liquid Glass",
+    "description": "Set up Liquid Glass, open Glass Tuner, turn the glass on and off.",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

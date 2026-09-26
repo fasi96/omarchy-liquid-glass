@@ -64,6 +64,26 @@ ver=$(hyprctl version -j | jq -r .tag | sed 's/^v//')
 term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
 case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
 
+# ---------------------------------------------------------------- consent
+[[ " $* " == *" --yes "* || " $* " == *" -y "* ]] && LG_YES=1
+if [ -z "${LG_YES:-}" ] && [ -t 0 ]; then
+    cat <<EOF
+
+Liquid Glass will:
+  - build and load the HyprGlass Liquid plugin with hyprpm (asks for your password)
+  - add fenced blocks to ~/.config/hypr/hyprland.lua, autostart.lua and bindings.lua
+  - make foot see-through ([colors-dark] alpha in ~/.config/foot/foot.ini)
+  - install Glass Tuner (Super+Ctrl+G) and a theme hook
+Every file it touches is backed up first, and ./uninstall.sh removes it all.
+
+EOF
+    if command -v gum >/dev/null; then
+        gum confirm "Set up Liquid Glass?" || { echo "nothing changed"; exit 0; }
+    else
+        read -rp "Set up Liquid Glass? [y/N] " a; [[ $a == [yY]* ]] || { echo "nothing changed"; exit 0; }
+    fi
+fi
+
 # ---------------------------------------------------------------- backups
 BK="$CONF/backup-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BK"
