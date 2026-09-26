@@ -110,6 +110,20 @@ const SECTIONS = [
     ['fresnel_strength', 'Edge glow', 'Light caught all around the rim'],
     ['specular_strength', 'Top highlight', 'Shine along the top of the rim'],
   ]},
+  { title: 'Edge shape', edge: true, rows: [
+    ['refraction_spread', 'Bend depth', '1 = bends across the whole window, 0 = only a rim with a flat middle'],
+    ['refraction_flow', 'Bend along edges', '0 = pulls toward the middle, 1 = slides along the edges'],
+    ['fresnel_tint', 'Edge glow colour', '0 = white, 1 = picks up the colours behind the glass'],
+    ['specular_angle', 'Highlight direction', 'Where the top highlight comes from: 0 top, 90 right, 180 bottom, 270 left'],
+    ['self_sample', 'Own text in the glass', "Mixes the terminal's own content into the glass behind it. 0 = off"],
+  ]},
+  { title: 'Glass edge line', edge: true, rows: [
+    ['bevel_strength', 'Line', 'A thin lit line along the glass edge. 0 = none'],
+    ['bevel_size', 'Thickness', 'px'],
+    ['bevel_angle', 'Light direction', '0 top, 90 right, 180 bottom, 270 left'],
+    ['bevel_shadow', 'Shadow side', 'Darker on the side away from the light'],
+    ['bevel_tint', 'Colour from behind', '0 = its own colour, 1 = the colours behind the glass'],
+  ], extra: ['bevel_color', 'Line colour'] },
   { title: 'Glass body', rows: [
     ['lens_distortion', 'Lens dome', 'Magnifies the middle like a lens'],
   ]},
@@ -202,7 +216,7 @@ function saveOpen(set) { try { localStorage.setItem(OPEN_KEY, JSON.stringify([..
 let S = {}, SAVED = {}, META = {}, timer = null, compare = false;
 const $ = id => document.getElementById(id);
 const range = k => (META.glass[k] || META.look[k]);
-const isInt = k => ['oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle'].includes(k);
+const isInt = k => ['specular_angle', 'bevel_angle', 'oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle'].includes(k);
 
 function status(msg, cls = '') { const el = $('status'); el.textContent = msg; el.className = 'status ' + cls; }
 
@@ -276,6 +290,7 @@ function build() {
   const open = openSet();
   for (const sec of SECTIONS) {
     if (sec.light && !META.light) continue;   // patched build not loaded
+    if (sec.edge && !META.edge) continue;     // plugin older than hyprglass v0.9.0
 
     if (sec.group) {                           // a heading plus shared settings
       const g = document.createElement('div'); g.className = 'group';

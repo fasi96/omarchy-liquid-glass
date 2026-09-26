@@ -117,6 +117,20 @@ LIGHT = {
     "glow_flex":            (-4.0, 4.0, 1.2),
     "materialize_duration": (0.05, 2.0, 0.45),   # seconds
 }
+# Edge shaping from hyprglass v0.9.0 (sent only when the loaded plugin has them).
+# The defaults are the plugin's own, so a saved look without them doesn't change.
+EDGE = {
+    "refraction_flow":      (0.0, 1.0, 0.0),     # 0 bends toward the centre, 1 along the edges
+    "refraction_spread":    (0.0, 1.0, 1.0),     # 1 bends across the window, 0 only a rim with a flat middle
+    "fresnel_tint":         (0.0, 1.0, 0.0),     # edge glow colour: 0 white, 1 the colours behind the glass
+    "specular_angle":       (0, 360, 0),         # top highlight direction, degrees clockwise from the top
+    "bevel_strength":       (0.0, 2.0, 0.0),     # thin lit line along the glass edge
+    "bevel_size":           (1.0, 24.0, 6.0),    # px
+    "bevel_angle":          (0, 360, 315),       # where the line's light comes from
+    "bevel_shadow":         (0.0, 1.0, 0.0),     # darker on the side away from the light
+    "bevel_tint":           (0.0, 1.0, 0.0),     # 0 its own colour, 1 the colours behind the glass
+    "self_sample":          (0.0, 1.0, 0.0),     # mixes the window's own content into the glass
+}
 # Text in foot (applies to terminals, not the glass plugin)
 FONT_WEIGHTS = ["regular", "medium", "semibold", "bold"]
 
@@ -138,16 +152,16 @@ LOOK = {
 BOOLS = {"bold_bright": True, "glass_on": True, "shadow": True, "border_spin": False, "glass_border": True,
          "light_on": True, "glow_on": True, "materialize_on": True,
          "parallax_on": True, "drift_on": False, "oil_on": True}
-INT_KEYS = {"oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle"}
+INT_KEYS = {"specular_angle", "bevel_angle", "oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle"}
 
 
 def defaults():
     """Built-in values, overlaid with the look shipped in ../defaults.json."""
-    d = {k: v[2] for k, v in {**GLASS, **LIGHT, **LOOK}.items()}
+    d = {k: v[2] for k, v in {**GLASS, **LIGHT, **EDGE, **LOOK}.items()}
     d.update(_shipped())
     d.update(BOOLS)
     d["font_weight"] = "medium"
-    d.update(tint="8899aa", rim_color="ffffff", light_color="ffffff")
+    d.update(tint="8899aa", rim_color="ffffff", light_color="ffffff", bevel_color="ffffff")
     return d
 
 
@@ -162,7 +176,7 @@ def _shipped():
 def clean(raw):
     """Clamp and type-check everything: these values end up inside Lua code."""
     s = defaults()
-    for k, (lo, hi, _) in {**GLASS, **LIGHT, **LOOK}.items():
+    for k, (lo, hi, _) in {**GLASS, **LIGHT, **EDGE, **LOOK}.items():
         if k in raw:
             try:
                 v = min(max(float(raw[k]), lo), hi)
@@ -174,7 +188,7 @@ def clean(raw):
             s[k] = bool(raw[k])
     if raw.get("font_weight") in FONT_WEIGHTS:
         s["font_weight"] = raw["font_weight"]
-    for k in ("tint", "rim_color", "light_color"):
+    for k in ("tint", "rim_color", "light_color", "bevel_color"):
         if isinstance(raw.get(k), str) and re.fullmatch(r"[0-9a-fA-F]{6}", raw[k]):
             s[k] = raw[k].lower()
     return s
@@ -229,6 +243,28 @@ def light_supported():
                              capture_output=True, text=True).stdout
         _light_ok[0] = bool(out) and "no such option" not in out
     return _light_ok[0]
+
+
+def edge_supported():
+    """True when the loaded hyprglass has the v0.9.0 edge options."""
+    if _edge_ok[0] is None:
+        out = subprocess.run(["hyprctl", "getoption", "plugin:hyprglass:refraction_flow"],
+                             capture_output=True, text=True).stdout
+        _edge_ok[0] = bool(out) and "no such option" not in out
+    return _edge_ok[0]
+
+
+_edge_ok = [None]
+
+
+def edge_lua(s, preview_off=False):
+    vals = {k: s[k] for k in EDGE}
+    if preview_off or not s["glass_on"]:
+        vals["bevel_strength"] = vals["self_sample"] = 0.0
+    body = ", ".join(f"{k} = {float(v)}" for k, v in vals.items())
+    # white = the plugin's own default (alpha 0); any other colour replaces white fully
+    col = "0xffffff00" if s["bevel_color"] == "ffffff" else f"0x{s['bevel_color']}ff"
+    return f"hl.plugin.hyprglass.config({{ {body}, bevel_color = {col} }})\n"
 
 
 def light_lua(s, preview_off=False):
@@ -364,7 +400,8 @@ _live = {"state": None}   # what's on screen right now, saved or not
 
 def apply(s, preview_off=False):
     _live["state"] = s
-    hypr_eval(glass_lua(s, preview_off) + (light_lua(s, preview_off) if light_supported() else "") + look_lua(s))
+    hypr_eval(glass_lua(s, preview_off) + (edge_lua(s, preview_off) if edge_supported() else "")
+              + (light_lua(s, preview_off) if light_supported() else "") + look_lua(s))
     if _last_alpha[0] != s["foot_alpha"]:
         push_foot_alpha(s["foot_alpha"])
         _last_alpha[0] = s["foot_alpha"]
@@ -381,6 +418,7 @@ def save(s):
 
     glass_block = glass_lua(s).replace("\n", "\n  ").rstrip()
     light_block = light_lua(s).replace("\n", "\n  ").rstrip()
+    edge_block = edge_lua(s).replace("\n", "\n  ").rstrip()
     lua = (
         "-- Liquid Glass for Omarchy: glass on terminals + the window look.\n"
         "-- GENERATED by Glass Tuner (Super+Ctrl+G, Save). Edit with the tuner, not by hand:\n"
@@ -388,6 +426,7 @@ def save(s):
         "-- https://github.com/fasi96/omarchy-liquid-glass\n"
         "if hl.plugin.hyprglass then\n"
         f"  {glass_block}\n"
+        + (f"  -- edge shaping (hyprglass v0.9.0)\n  {edge_block}\n" if edge_supported() else "")
         + (f"  -- Liquid Glass motion (HyprGlass Liquid fork)\n  {light_block}\n" if light_supported() else "")
         + "end\n\n"
         + look_lua(s)
@@ -442,6 +481,7 @@ def float_center(addr, w, h, right=False):
     mons = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout)
     m = next((m for m in mons if m["id"] == mon.get("monitorID")), mons[0])
     mw, mh = int(m["width"] / m["scale"]), int(m["height"] / m["scale"])
+    w, h = min(w, mw - 48), min(h, mh - 48)   # fit short or scaled screens (e.g. a 4K TV at 2.5x is 864 tall)
     x, y = m["x"] + (mw - w) // 2, m["y"] + (mh - h) // 2
     if right:   # tuner docks to the right edge so it never covers the test window
         x = m["x"] + mw - w - 24
@@ -490,8 +530,8 @@ class H(BaseHTTPRequestHandler):
         elif self.path == "/looks":
             self.send(200, json.dumps(load_looks()))
         elif self.path == "/state":
-            meta = {"glass": {**GLASS, **LIGHT}, "look": LOOK, "defaults": defaults(),
-                    "light": light_supported()}
+            meta = {"glass": {**GLASS, **LIGHT, **EDGE}, "look": LOOK, "defaults": defaults(),
+                    "light": light_supported(), "edge": edge_supported()}
             self.send(200, json.dumps({"state": load_state(), "meta": meta}))
         else:
             self.send(404, "{}")
@@ -582,7 +622,8 @@ def watch_reloads():
             time.sleep(1.2)   # let theme-set finish recolouring terminals first
             s = _live["state"]
             if s is not None:
-                hypr_eval(glass_lua(s) + (light_lua(s) if light_supported() else "") + look_lua(s))
+                hypr_eval(glass_lua(s) + (edge_lua(s) if edge_supported() else "")
+                          + (light_lua(s) if light_supported() else "") + look_lua(s))
             push_foot_alpha((s or load_state())["foot_alpha"])
             push_foot_text((s or load_state())["text_boost"])
 
