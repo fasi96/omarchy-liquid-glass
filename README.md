@@ -19,11 +19,22 @@ It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux, 
 
 ## Requirements
 
+- Dependencies: `hyprpm` (ships with Hyprland), `base-devel cmake meson cpio pkgconf git` (installed for you), `python3`, `jq`, `chromium` for the tuner window, `foot`.
 - Omarchy with **Hyprland 0.56.2**. That's the tested version; others may not build yet.
 - **foot** as your terminal (Omarchy's default). The glass shows through see-through windows, and Glass Tuner's terminal settings are for foot.
 - A few minutes for `hyprpm` to build the plugin the first time. It asks for your password to install build tools and Hyprland headers.
 
 ## Install
+
+**As an Omarchy plugin** (adds a glass button to your bar):
+
+```bash
+omarchy plugin add https://github.com/fasi96/omarchy-liquid-glass --enable
+```
+
+Click the new glass button on the bar. The first click opens a terminal that shows what Liquid Glass will change and asks before doing anything. After setup, the button opens Glass Tuner, and a right click turns the glass on and off. If a Hyprland update ever unloads the glass plugin, the button shows `!` and one click rebuilds it.
+
+**Or with the script:**
 
 ```bash
 git clone https://github.com/fasi96/omarchy-liquid-glass
@@ -31,9 +42,9 @@ cd omarchy-liquid-glass
 ./install.sh
 ```
 
-Then open a **new terminal**, and press **Super+Ctrl+G** for Glass Tuner (or search "Glass Tuner" in the launcher).
+Either way, open a **new terminal** afterwards, and press **Super+Ctrl+G** for Glass Tuner (or search "Glass Tuner" in the launcher).
 
-Everything the installer adds to your config is fenced with `omarchy-liquid-glass` markers, and it backs up every file it touches to `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already use upstream HyprGlass, the installer replaces it with the fork, since both provide the same plugin.
+Setup builds the plugin with `hyprpm`, which installs build tools and Hyprland headers, so it asks for your password and takes a few minutes the first time. Everything it adds to your config is fenced with `omarchy-liquid-glass` markers, and it backs up every file it touches to `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already use upstream HyprGlass, it replaces it with the fork, since both provide the same plugin.
 
 ## Glass Tuner
 
@@ -53,6 +64,13 @@ Changes show live; nothing sticks until you press **Save**. Use **Hold to compar
 ```bash
 ./uninstall.sh            # removes everything it added; keeps your saved looks
 ./uninstall.sh --purge    # also deletes ~/.config/omarchy-liquid-glass
+```
+
+Installed as a plugin? Run the same script from the plugin folder, then remove the bar button:
+
+```bash
+~/.config/omarchy/plugins/io.github.fasi96.liquid-glass/uninstall.sh
+omarchy plugin remove io.github.fasi96.liquid-glass
 ```
 
 ## After a Hyprland update
