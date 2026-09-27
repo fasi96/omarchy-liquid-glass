@@ -46,28 +46,14 @@ ask()  {   # ask QUESTION: yes/no in a terminal; no terminal = no
     if command -v gum >/dev/null; then gum confirm "$1"; else read -rp "$1 [y/N] " a; [[ $a == [yY]* ]]; fi
 }
 
-# add_block FILE COMMENT_PREFIX CONTENT — append a fenced block once (replace it if already there)
+# add_block FILE COMMENT_PREFIX CONTENT: (re)write our fenced block at the end of FILE.
+# lib/blocks.py records each block's sha256; if you changed the block, your version
+# is saved to the backup folder first.
 add_block() {
-    local file=$1 c=$2 content=$3
-    mkdir -p "$(dirname "$file")"; touch "$file"
-    remove_block "$file" "$c"
-    printf '\n%s %s\n%s\n%s %s\n' "$c" "$BEGIN" "$content" "$c" "$END" >> "$file"
-}
-remove_block() {   # removes exactly what add_block appended; writes through symlinks, atomically
-    local file=$1 c=$2
-    [ -f "$file" ] || return 0
-    python3 - "$file" "$c $BEGIN" "$c $END" <<'EOF'
-import os, re, sys
-path, begin, end = sys.argv[1:4]
-real = os.path.realpath(path)
-s = open(real).read()
-new = re.sub(r"(?:\n|^)" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", s, flags=re.S)
-if new != s:
-    tmp = f"{real}.tmp-{os.getpid()}"
-    open(tmp, "w").write(new)
-    os.chmod(tmp, os.stat(real).st_mode & 0o7777)
-    os.replace(tmp, real)
-EOF
+    local tmp; tmp=$(mktemp)
+    printf '%s\n' "$3" > "$tmp"
+    python3 "$SRC/lib/blocks.py" add "$1" "$2" "$tmp" "$BK"
+    rm -f "$tmp"
 }
 
 # ours = the file is exactly what we installed last time (listed in the manifest)
@@ -290,8 +276,8 @@ fi
 
 # ---------------------------------------------------------------- files
 say "installing Glass Tuner"
-mkdir -p "$DEST/tuner" "$CONF"
-TUNER_FILES=(tuner/tuner.py tuner/tuner.html defaults.json uninstall.sh)
+mkdir -p "$DEST/tuner" "$DEST/lib" "$CONF"
+TUNER_FILES=(tuner/tuner.py tuner/tuner.html lib/blocks.py defaults.json uninstall.sh)
 for f in "${TUNER_FILES[@]}"; do guard "$DEST/$f"; install -m "$( [ "$f" = uninstall.sh ] && echo 755 || echo 644 )" "$SRC/$f" "$DEST/$f"; done
 [ -f "$CONF/state.json" ] || cp "$SRC/defaults.json" "$CONF/state.json"
 [ -f "$CONF/looks.json" ] || cp "$SRC/looks-default.json" "$CONF/looks.json"

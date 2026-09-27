@@ -25,6 +25,12 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.dont_write_bytecode = True                     # leave nothing but installed files in the install folder
+sys.path.insert(0, os.path.join(HERE, "..", "lib"))
+try:
+    import blocks                                  # records our config blocks by sha256 (lib/blocks.py)
+except ImportError:                                # a bare copy of the tuner (demo recordings)
+    blocks = None
 HOME = os.path.expanduser("~")
 CONF_DIR = os.path.join(HOME, ".config/omarchy-liquid-glass")
 STATE_FILE = os.path.join(CONF_DIR, "state.json")
@@ -506,8 +512,17 @@ def _update_foot(s, create):
     if ini is None:
         return
     new = write_foot(s, ini, create=create)
-    if new != ini:
-        write_atomic(FOOT_INI, new)
+    if new == ini:
+        return
+    if blocks:
+        old = blocks.pattern("#").search(ini)
+        if old and not blocks.is_ours(FOOT_INI, old.group(1)):   # you edited our block: keep your version
+            where = blocks.keep_copy(FOOT_INI, old.group(1), os.path.join(CONF_DIR, "backup-" + time.strftime("%Y%m%d-%H%M%S")))
+            print(f"kept your edited Liquid Glass block from foot.ini at {where}")
+    write_atomic(FOOT_INI, new)
+    if blocks:
+        m = blocks.pattern("#").search(new)
+        blocks.record(FOOT_INI, m.group(1) if m else None)
 
 
 def _keep_hand_edits(path):

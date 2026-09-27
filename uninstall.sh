@@ -37,21 +37,16 @@ done
 
 say() { printf '\033[1;36m==>\033[0m %s\n' "$*"; }
 
-remove_block() {   # removes exactly what install.sh appended; writes through symlinks, atomically
-    local file=$1 c=$2
-    [ -f "$file" ] || return 0
-    python3 - "$file" "$c $BEGIN" "$c $END" <<'EOF'
-import os, re, sys
-path, begin, end = sys.argv[1:4]
-real = os.path.realpath(path)
-s = open(real).read()
-new = re.sub(r"(?:\n|^)" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", s, flags=re.S)
-if new != s:
-    tmp = f"{real}.tmp-{os.getpid()}"
-    open(tmp, "w").write(new)
-    os.chmod(tmp, os.stat(real).st_mode & 0o7777)
-    os.replace(tmp, real)
-EOF
+BLOCKS_PY="$HERE/lib/blocks.py"; [ -f "$BLOCKS_PY" ] || BLOCKS_PY="$DEST/lib/blocks.py"
+KEPT=()
+# remove our fenced block, but only if it is still exactly what Liquid Glass wrote
+remove_block() {
+    local rc=0
+    [ -f "$BLOCKS_PY" ] || { grep -q "$BEGIN" "$1" 2>/dev/null && KEPT+=("the Liquid Glass block in $1 (can't verify it: lib/blocks.py is missing)"); return 0; }
+    python3 "$BLOCKS_PY" remove "$1" "$2" || rc=$?
+    [ "$rc" = 3 ] && KEPT+=("the Liquid Glass block in $1 (you changed it; delete the lines between the omarchy-liquid-glass markers yourself if you want it gone)")
+    [ "$rc" = 0 ] || [ "$rc" = 3 ] || KEPT+=("the Liquid Glass block in $1 (couldn't check it)")
+    return 0
 }
 
 # ---------------------------------------------------------------- config blocks
@@ -70,7 +65,6 @@ fi
 # Removed only if they are still exactly what we installed or generated
 # (listed with their sha256 in $MANIFEST / $GENERATED). Anything you changed or
 # added is kept and listed at the end.
-KEPT=()
 remove_if_ours() {   # remove_if_ours <file> <checksum list>
     [ -e "$1" ] || return 0
     if [ -f "$2" ] && grep -qxF "$(sha256sum "$1" | cut -d' ' -f1)  $1" "$2"; then
@@ -118,8 +112,15 @@ if [ -d "$DEST" ]; then
     find "$DEST" -depth -type d -empty -delete || true
     [ -d "$DEST" ] && KEPT+=("$DEST/ (has files Liquid Glass didn't install)")
 fi
-# Glass Tuner's own browser profile (only ever used by the tuner window)
-rm -rf "$CACHE"
+# Glass Tuner's browser profile: Chromium's own files, so we can't checksum them.
+# Ask before deleting it; without a terminal, keep it and say where it is.
+if [ -d "$CACHE/tuner-browser" ]; then
+    a=""
+    [ -t 0 ] && read -rp "Delete Glass Tuner's browser profile ($CACHE/tuner-browser)? [y/N] " a
+    if [[ $a == [yY]* ]]; then rm -rf "$CACHE/tuner-browser"; else KEPT+=("$CACHE/tuner-browser (Glass Tuner's browser profile; safe to delete)"); fi
+fi
+[ -d "$CACHE" ] && rmdir "$CACHE" 2>/dev/null || true
+[ -d "$CACHE" ] && [ ! -d "$CACHE/tuner-browser" ] && KEPT+=("$CACHE/ (has files Liquid Glass didn't create)")
 [ -d "$HOME/.cache/glass-tuner" ] && KEPT+=("$HOME/.cache/glass-tuner (browser profile from versions before 1.3; safe to delete)")
 
 # ---------------------------------------------------------------- plugin
@@ -137,6 +138,7 @@ elif [ -f "$st" ]; then
     say "if you want it gone too: hyprpm remove HyprGlassLiquid"
 fi
 rm -f "$CONF/hyprpm-repo" "$MANIFEST" "$GENERATED" "$CONF/plugin-rev"   # bookkeeping for the steps above
+[ -s "$CONF/blocks.sha256" ] || rm -f "$CONF/blocks.sha256"                  # still lists any block you kept
 
 if [ ${#KEPT[@]} -gt 0 ]; then
     say "kept these because they aren't exactly what Liquid Glass installed (changed, added, or from an older version):"
