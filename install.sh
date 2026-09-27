@@ -63,9 +63,12 @@ guard() {
     for f in "$@"; do
         [ -e "$f" ] || continue
         ours "$f" && continue
-        mkdir -p "$BK/replaced"
-        cp -a "$f" "$BK/replaced/"
-        warn "$f isn't in Liquid Glass's install record (or you changed it; versions before 1.2 kept no record); a copy is in $BK/replaced/"
+        # keep the full path under replaced/, so files with the same name (both hooks
+        # are called omarchy-liquid-glass) can never overwrite each other's backup
+        local dest="$BK/replaced$f"
+        mkdir -p "$(dirname "$dest")"
+        cp -a "$f" "$dest"
+        warn "$f isn't in Liquid Glass's install record (or you changed it; versions before 1.2 kept no record); a copy is at $dest"
     done
 }
 
@@ -200,8 +203,8 @@ plugin_step() {
            && [ -z "$(git -C "$PLUGIN_SRC" status --porcelain --ignored 2>/dev/null)" ]; then
             rm -rf "$PLUGIN_SRC"
         else
-            mkdir -p "$BK/replaced"; mv "$PLUGIN_SRC" "$BK/replaced/"
-            warn "$PLUGIN_SRC wasn't Liquid Glass's untouched copy; moved it to $BK/replaced/"
+            mkdir -p "$(dirname "$BK/replaced$PLUGIN_SRC")"; mv "$PLUGIN_SRC" "$BK/replaced$PLUGIN_SRC"
+            warn "$PLUGIN_SRC wasn't Liquid Glass's untouched copy; moved it to $BK/replaced$PLUGIN_SRC"
         fi
     fi
     mkdir -p "$PLUGIN_SRC"

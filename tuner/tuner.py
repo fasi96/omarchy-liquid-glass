@@ -467,7 +467,12 @@ def _keep_hand_edits(path):
         have = hashlib.sha256(f.read()).hexdigest()
     if have != want:
         import shutil
-        shutil.copy2(path, f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+        base, n = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}", 1
+        dest = base
+        while os.path.exists(dest):           # never overwrite an earlier copy
+            n += 1
+            dest = f"{base}-{n}"
+        shutil.copy2(path, dest)
 
 
 def save(s, persist=True):
