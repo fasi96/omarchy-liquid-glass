@@ -68,6 +68,7 @@ term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
 case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
 
 [[ " $* " == *" --plugin-only "* ]] && LG_PLUGIN_ONLY=1 && LG_YES=1
+[[ " $* " == *" --replace-hyprglass "* ]] && LG_REPLACE_HYPRGLASS=1
 
 # ---------------------------------------------------------------- consent
 [[ " $* " == *" --yes "* || " $* " == *" -y "* ]] && LG_YES=1
@@ -102,7 +103,52 @@ say "backups in $BK"
 # moving branch: fetch exactly that commit into a local repo that holds nothing
 # newer, check its hash, and let hyprpm build from that local copy at that
 # commit. `hyprpm update` can only ever pull from this pinned local repo.
+# hyprpm repositories that provide a "hyprglass" plugin, one "name<TAB>url" per line
+glass_repos() {
+    local st
+    for st in "${HYPRPM_CACHE:-/var/cache/hyprpm/$USER}"/*/state.toml; do
+        [ -f "$st" ] && grep -q '^\[hyprglass\]' "$st" || continue
+        printf '%s\t%s\n' "$(sed -n "s/^name = '\(.*\)'$/\1/p" "$st")" "$(sed -n "s/^url = '\(.*\)'$/\1/p" "$st")"
+    done
+}
+
+# Ours = recorded when we installed it AND hyprpm says it was built from our pinned local copy.
+owns_repo() { [ "$1" = HyprGlassLiquid ] && [ "$2" = "$PLUGIN_SRC" ] && [ "$(cat "$CONF/hyprpm-repo" 2>/dev/null)" = "$1" ]; }
+
+# Only one "hyprglass" plugin can be loaded. Our own earlier build is replaced
+# silently; anything else was installed outside Liquid Glass, so ask first and
+# leave it alone unless the user says yes (or passes --replace-hyprglass).
+# Decides up front (before anything changes); the removal happens later.
+REMOVE_REPOS=()
+decide_glass_repos() {
+    local name url
+    while IFS=$'\t' read -r name url; do
+        [ -n "$name" ] || continue
+        if owns_repo "$name" "$url"; then
+            say "replacing Liquid Glass's earlier build ($name)"
+        else
+            warn "hyprpm has '$name' installed from ${url:-an unknown source}, which Liquid Glass did not install."
+            warn "It provides the same 'hyprglass' plugin, so only one of them can be loaded."
+            if [ -n "${LG_REPLACE_HYPRGLASS:-}" ]; then
+                :
+            elif [ -t 0 ] && command -v gum >/dev/null; then
+                gum confirm "Remove '$name' from hyprpm so Liquid Glass can install its build?" \
+                    || die "left '$name' untouched; nothing was changed in hyprpm"
+            elif [ -t 0 ]; then
+                read -rp "Remove '$name' from hyprpm so Liquid Glass can install its build? [y/N] " a
+                [[ $a == [yY]* ]] || die "left '$name' untouched; nothing was changed in hyprpm"
+            else
+                die "'$name' is installed outside Liquid Glass; run in a terminal, or pass --replace-hyprglass to replace it"
+            fi
+        fi
+        REMOVE_REPOS+=("$name")
+    done < <(glass_repos)
+}
+
 plugin_step() {
+    # decide about other hyprglass installs before touching anything
+    decide_glass_repos
+
     say "installing build tools for hyprpm (sudo)"
     sudo pacman -S --needed --noconfirm base-devel cmake meson cpio pkgconf git >/dev/null
 
@@ -116,22 +162,15 @@ plugin_step() {
     [ "$(git -C "$PLUGIN_SRC" rev-parse HEAD)" = "$HYPRGLASS_REV" ] || die "fetched source is not commit $HYPRGLASS_REV"
     git -C "$PLUGIN_SRC" fsck --no-progress --no-dangling >/dev/null || die "fetched source failed git fsck"
 
-    local repos
-    repos=$(hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
-    if grep -q "Repository HyprGlass " <<<"$repos"; then
-        say "removing upstream HyprGlass (this fork replaces it)"
-        hyprpm remove HyprGlass
-    fi
-    if grep -q "Repository HyprGlassLiquid" <<<"$repos"; then
-        say "replacing the installed HyprGlass Liquid with the pinned build"
-        hyprpm remove HyprGlassLiquid
-    fi
+    local r
+    for r in "${REMOVE_REPOS[@]}"; do say "hyprpm: removing $r"; hyprpm remove "$r"; done
 
     say "hyprpm: fetching Hyprland headers (can take a few minutes)"
     hyprpm update
 
     say "hyprpm: building HyprGlass Liquid ${HYPRGLASS_REV:0:12}"
     hyprpm add "$PLUGIN_SRC" "$HYPRGLASS_REV"
+    echo HyprGlassLiquid > "$CONF/hyprpm-repo"      # ownership record, checked by owns_repo / uninstall.sh
     hyprpm enable hyprglass
     hyprpm reload -n
 }

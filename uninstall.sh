@@ -43,10 +43,17 @@ rm -f "$HYPR/liquid_glass.lua" "$HOOK" "$FONT_HOOK" "$DESKTOP"
 rm -rf "$DEST"
 
 say "removing the plugin"
-if [ -z "${LG_SKIP_PLUGIN:-}" ] && hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q "Repository HyprGlassLiquid"; then
-    hyprpm disable hyprglass || true
+# Only the build Liquid Glass installed: our ownership record plus hyprpm saying it
+# was built from our pinned local copy. Any other hyprglass install is left alone.
+st="${HYPRPM_CACHE:-/var/cache/hyprpm/$USER}/HyprGlassLiquid/state.toml"
+url=$(sed -n "s/^url = '\(.*\)'$/\1/p" "$st" 2>/dev/null)
+if [ -z "${LG_SKIP_PLUGIN:-}" ] && [ "$(cat "$CONF/hyprpm-repo" 2>/dev/null)" = HyprGlassLiquid ] \
+   && [ "$url" = "$DEST/hyprglass-src" ]; then
     hyprpm remove HyprGlassLiquid
+elif [ -f "$st" ]; then
+    say "leaving hyprpm's HyprGlassLiquid alone: Liquid Glass didn't install it (source: ${url:-unknown})"
 fi
+rm -f "$CONF/hyprpm-repo"
 
 [ "${1:-}" = "--purge" ] && rm -rf "$CONF" && say "removed your saved settings"
 hyprctl reload >/dev/null || true
