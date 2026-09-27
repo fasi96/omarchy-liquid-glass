@@ -72,7 +72,7 @@ BarWidget {
     if (mode === "setup") {
       terminal("cd '" + repoDir + "' && ./install.sh")
     } else if (mode === "rebuild") {
-      terminal("hyprpm update && hyprpm reload -n && hyprctl reload")
+      terminal("cd '" + repoDir + "' && ./install.sh --plugin-only && hyprctl reload")
     } else if (b === Qt.RightButton) {
       Util.execArgv(["python3", tuner, "--toggle"])
     } else {

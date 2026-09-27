@@ -11,6 +11,7 @@ CONF="$HOME/.config/omarchy-liquid-glass"
 HYPR="$HOME/.config/hypr"
 FOOT="$HOME/.config/foot/foot.ini"
 HOOK="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-liquid-glass"
+FONT_HOOK="$HOME/.config/omarchy/hooks/font-set.d/omarchy-liquid-glass"
 DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"
 BEGIN="omarchy-liquid-glass >>>"
 END="<<< omarchy-liquid-glass"
@@ -24,22 +25,21 @@ remove_block() {
 import re, sys
 path, begin, end = sys.argv[1:4]
 s = open(path).read()
-s = re.sub(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "\n", s, flags=re.S)
+s = re.sub(r"(?:\n|^)" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", s, flags=re.S)   # exactly what add_block appended
 open(path, "w").write(s)
 EOF
 }
 
 say "removing config blocks"
 for f in hyprland.lua autostart.lua bindings.lua; do remove_block "$HYPR/$f" "--"; done
+# Everything Glass Tuner sets in foot.ini is inside its fenced block; your own
+# lines were never edited, so removing the block is all it takes.
 remove_block "$FOOT" "#"
-# lines Glass Tuner manages outside the block: text colour, bold-in-bright, font weight
-if [ -f "$FOOT" ]; then
-    sed -i -e '/^foreground=[0-9a-fA-F]\{6\}$/d' -e '/^bold-text-in-bright=/d' -e 's/^\(font=.*\):weight=[a-z]*/\1/' "$FOOT"
-    if [ -s "$CONF/foot-pad.orig" ]; then
-        sed -i "s/^pad=.*/$(cat "$CONF/foot-pad.orig")/" "$FOOT"; rm -f "$CONF/foot-pad.orig"
-    fi
+# versions before 1.1 edited your pad= line: put back the value saved at install
+if [ -f "$FOOT" ] && [ -s "$CONF/foot-pad.orig" ]; then
+    sed -i "0,/^pad=.*/s//$(cat "$CONF/foot-pad.orig")/" "$FOOT"; rm -f "$CONF/foot-pad.orig"
 fi
-rm -f "$HYPR/liquid_glass.lua" "$HOOK" "$DESKTOP"
+rm -f "$HYPR/liquid_glass.lua" "$HOOK" "$FONT_HOOK" "$DESKTOP"
 rm -rf "$DEST"
 
 say "removing the plugin"

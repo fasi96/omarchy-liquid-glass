@@ -24,6 +24,9 @@ FOOT="$HOME/.config/foot/foot.ini"
 HOOK="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-liquid-glass"
 DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"
 PLUGIN_REPO="https://github.com/fasi96/hyprglass"
+HYPRGLASS_REV="d7d650e0208ab9b8ea7e9bf5afca6927a9ee6512"   # reviewed plugin commit; bump deliberately
+PLUGIN_SRC="$DEST/hyprglass-src"
+FONT_HOOK="$HOME/.config/omarchy/hooks/font-set.d/omarchy-liquid-glass"
 TESTED_HYPRLAND="0.56.2"
 BEGIN="omarchy-liquid-glass >>>"
 END="<<< omarchy-liquid-glass"
@@ -46,7 +49,7 @@ remove_block() {
 import re, sys
 path, begin, end = sys.argv[1:4]
 s = open(path).read()
-s = re.sub(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "\n", s, flags=re.S)
+s = re.sub(r"(?:\n|^)" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", "", s, flags=re.S)   # exactly what add_block appended
 open(path, "w").write(s)
 EOF
 }
@@ -63,6 +66,8 @@ ver=$(hyprctl version -j | jq -r .tag | sed 's/^v//')
 
 term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
 case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
+
+[[ " $* " == *" --plugin-only "* ]] && LG_PLUGIN_ONLY=1 && LG_YES=1
 
 # ---------------------------------------------------------------- consent
 [[ " $* " == *" --yes "* || " $* " == *" -y "* ]] && LG_YES=1
@@ -93,24 +98,48 @@ done
 say "backups in $BK"
 
 # ---------------------------------------------------------------- plugin
+# The native plugin is built from ONE reviewed commit of the fork, never from a
+# moving branch: fetch exactly that commit into a local repo that holds nothing
+# newer, check its hash, and let hyprpm build from that local copy at that
+# commit. `hyprpm update` can only ever pull from this pinned local repo.
+plugin_step() {
+    say "installing build tools for hyprpm (sudo)"
+    sudo pacman -S --needed --noconfirm base-devel cmake meson cpio pkgconf git >/dev/null
+
+    say "fetching HyprGlass Liquid at the pinned commit ${HYPRGLASS_REV:0:12}"
+    rm -rf "$PLUGIN_SRC"; mkdir -p "$PLUGIN_SRC"
+    git -C "$PLUGIN_SRC" init -q
+    git -C "$PLUGIN_SRC" remote add origin "$PLUGIN_REPO"
+    git -C "$PLUGIN_SRC" fetch -q origin "$HYPRGLASS_REV" || die "could not fetch commit $HYPRGLASS_REV from $PLUGIN_REPO"
+    git -C "$PLUGIN_SRC" checkout -q -B main FETCH_HEAD
+    git -C "$PLUGIN_SRC" remote remove origin
+    [ "$(git -C "$PLUGIN_SRC" rev-parse HEAD)" = "$HYPRGLASS_REV" ] || die "fetched source is not commit $HYPRGLASS_REV"
+    git -C "$PLUGIN_SRC" fsck --no-progress --no-dangling >/dev/null || die "fetched source failed git fsck"
+
+    local repos
+    repos=$(hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g')
+    if grep -q "Repository HyprGlass " <<<"$repos"; then
+        say "removing upstream HyprGlass (this fork replaces it)"
+        hyprpm remove HyprGlass
+    fi
+    if grep -q "Repository HyprGlassLiquid" <<<"$repos"; then
+        say "replacing the installed HyprGlass Liquid with the pinned build"
+        hyprpm remove HyprGlassLiquid
+    fi
+
+    say "hyprpm: fetching Hyprland headers (can take a few minutes)"
+    hyprpm update
+
+    say "hyprpm: building HyprGlass Liquid ${HYPRGLASS_REV:0:12}"
+    hyprpm add "$PLUGIN_SRC" "$HYPRGLASS_REV"
+    hyprpm enable hyprglass
+    hyprpm reload -n
+}
+
 if [ -n "${LG_SKIP_PLUGIN:-}" ]; then say "LG_SKIP_PLUGIN set: skipping the plugin step (testing)"; else
-say "installing build tools for hyprpm (sudo)"
-sudo pacman -S --needed --noconfirm base-devel cmake meson cpio pkgconf git >/dev/null
-
-say "hyprpm: fetching Hyprland headers (can take a few minutes)"
-hyprpm update
-
-if hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q "Repository HyprGlass "; then
-    say "removing upstream HyprGlass (this fork replaces it)"
-    hyprpm remove HyprGlass
+    plugin_step
 fi
-if ! hyprpm list 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' | grep -q "Repository HyprGlassLiquid"; then
-    say "hyprpm: adding HyprGlass Liquid"
-    hyprpm add "$PLUGIN_REPO"
-fi
-hyprpm enable hyprglass
-hyprpm reload -n
-fi
+[ -n "${LG_PLUGIN_ONLY:-}" ] && { say "plugin rebuilt"; exit 0; }
 
 # ---------------------------------------------------------------- files
 say "installing Glass Tuner"
@@ -119,6 +148,7 @@ cp -r "$SRC/tuner" "$SRC/defaults.json" "$DEST/"
 [ -f "$CONF/state.json" ] || cp "$SRC/defaults.json" "$CONF/state.json"
 [ -f "$CONF/looks.json" ] || cp "$SRC/looks-default.json" "$CONF/looks.json"
 
+mkdir -p "$(dirname "$DESKTOP")"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Name=Glass Tuner
@@ -139,14 +169,13 @@ o.launch_on_start("sh -c '"'"'hyprpm reload -n; hyprctl reload'"'"'")'
 add_block "$HYPR/bindings.lua" "--" "o.bind(\"SUPER + CTRL + G\", \"Glass Tuner\", \"python3 $DEST/tuner/tuner.py\")"
 
 # ---------------------------------------------------------------- foot
+# Glass Tuner keeps everything it sets in foot.ini inside one fenced block at
+# the end (later values win in foot); your own lines are never edited.
 say "making foot see-through"
-# remember the original padding (Glass Tuner changes it) so uninstall can put it back
-[ -f "$CONF/foot-pad.orig" ] || grep -m1 '^pad=' "$FOOT" > "$CONF/foot-pad.orig" 2>/dev/null || true
-grep -q '^pad=' "$FOOT" 2>/dev/null || add_block "$FOOT" "#" '[main]
-pad=14x14'
-add_block "$FOOT" "#" '# Liquid Glass: see-through terminal background, so the glass shows (Glass Tuner manages this)
-[colors-dark]
-alpha=0.25'
+mkdir -p "$(dirname "$FOOT")"; touch "$FOOT"
+if [ -s "$CONF/foot-pad.orig" ]; then       # versions before 1.1 edited your pad= line: put it back
+    sed -i "0,/^pad=.*/s//$(cat "$CONF/foot-pad.orig")/" "$FOOT"; rm -f "$CONF/foot-pad.orig"
+fi
 
 # ---------------------------------------------------------------- look + hook
 say "applying the Liquid Glass look"
@@ -159,6 +188,13 @@ cat > "$HOOK" <<EOF
 python3 "$DEST/tuner/tuner.py" --theme-hook
 EOF
 chmod +x "$HOOK"
+mkdir -p "$(dirname "$FONT_HOOK")"
+cat > "$FONT_HOOK" <<EOF
+#!/bin/bash
+# omarchy-liquid-glass: Omarchy rewrites every font= line on a font change; re-apply the glass font weight
+python3 "$DEST/tuner/tuner.py" --foot-sync
+EOF
+chmod +x "$FONT_HOOK"
 
 errs=$(hyprctl configerrors)
 [ -z "$errs" ] || warn "Hyprland reports config errors:\n$errs"

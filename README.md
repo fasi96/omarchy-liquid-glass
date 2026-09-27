@@ -75,7 +75,12 @@ omarchy plugin remove io.github.fasi96.liquid-glass
 
 ## After a Hyprland update
 
-`hyprpm` rebuilds the plugin for the new Hyprland with `hyprpm update`. Until the fork has a build for that version, the glass is off, but nothing else breaks.
+Hyprland plugins are compiled for one Hyprland version, so after an update the glass switches off until it's rebuilt. The bar button shows `!`; click it, or run `./install.sh --plugin-only`. Nothing else breaks meanwhile.
+
+## What gets built, and what gets changed
+
+- **The native plugin is pinned.** The installer fetches one reviewed commit of [HyprGlass Liquid](https://github.com/fasi96/hyprglass) (`HYPRGLASS_REV` in `install.sh`) into `~/.local/share/omarchy-liquid-glass/hyprglass-src`, checks the commit hash, and has `hyprpm` build that exact commit from the local copy. Newer commits on GitHub are never built until the pin is bumped in a new release.
+- **Your foot config is only ever appended to.** Everything Glass Tuner sets (transparency, padding, text colour, font weight, bold-in-bright) lives in one fenced `omarchy-liquid-glass` block at the end of `foot.ini`; foot lets later values win, so your own lines are never edited. The Hyprland files get fenced blocks the same way. `./uninstall.sh` removes exactly those blocks.
 
 ## Credits
 

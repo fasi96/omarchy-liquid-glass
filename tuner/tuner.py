@@ -396,24 +396,29 @@ def push_foot_text(boost):
             pass
 
 
-def write_foot_text(s, ini):
-    """foot.ini: font weight, bold-in-bright, and the themed text colour."""
-    m = re.search(r"(?m)^font=([^:\n]+)((?::[^\n]*)?)$", ini)
-    if m:
-        opts = [o for o in m.group(2).split(":") if o and not o.startswith("weight=")]
-        if s["font_weight"] != "regular":
-            opts.append(f"weight={s['font_weight']}")
-        ini = ini[:m.start()] + "font=" + m.group(1) + "".join(":" + o for o in opts) + ini[m.end():]
-    line = f"bold-text-in-bright={'yes' if s['bold_bright'] else 'no'}"
-    if re.search(r"(?m)^bold-text-in-bright=", ini):
-        ini = re.sub(r"(?m)^bold-text-in-bright=.*$", line, ini)
-    else:
-        ini = re.sub(r"(?m)^(font=.*)$", lambda mm: mm.group(1) + "\n" + line, ini, count=1)
-    # themed text colour lives next to alpha in the last [colors-dark] block
-    ini = re.sub(r"(?m)^foreground=[0-9a-fA-F]{6}\n?", "", ini)
+FOOT_BEGIN = "# omarchy-liquid-glass >>>"
+FOOT_END = "# <<< omarchy-liquid-glass"
+_FOOT_BLOCK = re.compile(r"\n?" + re.escape(FOOT_BEGIN) + r".*?" + re.escape(FOOT_END) + r"\n?", re.S)
+
+
+def write_foot(s, ini):
+    """Everything we set in foot.ini lives in one fenced block at the end of
+    the file (later values win in foot). The user's own lines are never
+    edited or removed, and uninstall.sh just drops the block."""
+    user = _FOOT_BLOCK.sub("\n", ini).rstrip("\n")
+    main = ["[main]"]
+    m = re.search(r"(?m)^font=([^\n]*)$", user)             # the user's font (Omarchy keeps it current)
+    if m and s["font_weight"] != "regular":
+        opts = [o for o in m.group(1).split(":") if not o.startswith("weight=")]
+        main.append("font=" + ":".join(opts + [f"weight={s['font_weight']}"]))
+    main.append(f"pad={s['foot_pad']}x{s['foot_pad']}")
+    main.append(f"bold-text-in-bright={'yes' if s['bold_bright'] else 'no'}")
+    colors = ["[colors-dark]", f"alpha={s['foot_alpha']}"]
     if s["text_boost"] > 0.001:
-        ini = re.sub(r"(?m)^(alpha=[0-9.]+)$", lambda mm: mm.group(1) + f"\nforeground={text_color(s['text_boost'])}", ini)
-    return ini
+        colors.append(f"foreground={text_color(s['text_boost'])}")
+    block = "\n".join([FOOT_BEGIN, "# Liquid Glass (managed by Glass Tuner; ./uninstall.sh removes this block)"]
+                      + main + colors + [FOOT_END])
+    return user + "\n\n" + block + "\n"
 
 
 def push_foot_alpha(alpha):
@@ -479,9 +484,7 @@ def save(s, persist=True):
 
     with open(FOOT_INI) as f:
         ini = f.read()
-    ini = re.sub(r"(?m)^alpha=[0-9.]+$", f"alpha={s['foot_alpha']}", ini)
-    ini = re.sub(r"(?m)^pad=\d+x\d+$", f"pad={s['foot_pad']}x{s['foot_pad']}", ini)
-    ini = write_foot_text(s, ini)
+    ini = write_foot(s, ini)
     with open(FOOT_INI, "w") as f:
         f.write(ini)
 
@@ -682,7 +685,7 @@ def theme_hook():
     else:
         with open(FOOT_INI) as f:
             ini = f.read()
-        new = write_foot_text(s, ini)
+        new = write_foot(s, ini)
         if new != ini:
             with open(FOOT_INI, "w") as f:
                 f.write(new)
@@ -706,6 +709,14 @@ def _mark_themed(on):
 def main():
     if "--theme-hook" in sys.argv:
         return theme_hook()
+    if "--foot-sync" in sys.argv:     # font-set hook
+        with open(FOOT_INI) as f:
+            ini = f.read()
+        new = write_foot(load_state(), ini)
+        if new != ini:
+            with open(FOOT_INI, "w") as f:
+                f.write(new)
+        return
     if "--toggle" in sys.argv:        # bar button: glass on/off, saved so it sticks
         s = load_state()
         s["glass_on"] = not s["glass_on"]
