@@ -12,7 +12,10 @@ HYPR="$HOME/.config/hypr"
 FOOT="$HOME/.config/foot/foot.ini"
 HOOK="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-liquid-glass"
 FONT_HOOK="$HOME/.config/omarchy/hooks/font-set.d/omarchy-liquid-glass"
-DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"
+DESKTOP="$HOME/.local/share/applications/omarchy-liquid-glass-tuner.desktop"
+LEGACY_DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"   # versions before 1.2
+MANIFEST="$CONF/installed.sha256"
+GENERATED="$CONF/generated.sha256"
 BEGIN="omarchy-liquid-glass >>>"
 END="<<< omarchy-liquid-glass"
 
@@ -39,8 +42,51 @@ remove_block "$FOOT" "#"
 if [ -f "$FOOT" ] && [ -s "$CONF/foot-pad.orig" ]; then
     sed -i "0,/^pad=.*/s//$(cat "$CONF/foot-pad.orig")/" "$FOOT"; rm -f "$CONF/foot-pad.orig"
 fi
-rm -f "$HYPR/liquid_glass.lua" "$HOOK" "$FONT_HOOK" "$DESKTOP"
-rm -rf "$DEST"
+
+# Files: removed only if they are still exactly what we installed or generated
+# (listed with their sha256 in $MANIFEST / $GENERATED). Anything you changed or
+# added is kept and listed at the end.
+KEPT=()
+remove_if_ours() {   # remove_if_ours <file> <checksum list>
+    [ -e "$1" ] || return 0
+    if [ -f "$2" ] && grep -qxF "$(sha256sum "$1" | cut -d' ' -f1)  $1" "$2"; then
+        rm -f "$1"
+    else
+        KEPT+=("$1")
+    fi
+}
+if [ -f "$MANIFEST" ]; then
+    while IFS= read -r line; do remove_if_ours "${line:66}" "$MANIFEST"; done < "$MANIFEST"
+fi
+[ -f "$MANIFEST" ] || for f in "$DESKTOP" "$HOOK" "$FONT_HOOK"; do remove_if_ours "$f" "$MANIFEST"; done   # no record: keep and list
+remove_if_ours "$HYPR/liquid_glass.lua" "$GENERATED"
+
+# the desktop entry versions before 1.2 wrote: removed only if byte-for-byte that
+if [ -f "$LEGACY_DESKTOP" ]; then
+    legacy="[Desktop Entry]
+Name=Glass Tuner
+Comment=Live sliders for Liquid Glass and the window look
+Keywords=glass;liquid;blur;transparency;refraction;look;appearance;window;
+Exec=python3 $DEST/tuner/tuner.py
+Icon=preferences-desktop-theme
+Type=Application
+Categories=Settings;"
+    if [ "$(cat "$LEGACY_DESKTOP")" = "$legacy" ]; then rm -f "$LEGACY_DESKTOP"; else KEPT+=("$LEGACY_DESKTOP"); fi
+fi
+
+# pinned plugin source: removed only if git says it is still exactly the pinned commit
+src="$DEST/hyprglass-src"
+if [ -d "$src" ]; then
+    if [ -s "$CONF/plugin-rev" ] && [ "$(git -C "$src" rev-parse HEAD 2>/dev/null)" = "$(cat "$CONF/plugin-rev")" ] \
+       && [ -z "$(git -C "$src" status --porcelain --ignored 2>/dev/null)" ]; then
+        rm -rf "$src"
+    else
+        KEPT+=("$src")
+    fi
+fi
+# folders we created go only if nothing else is left in them
+[ -d "$DEST" ] && find "$DEST" -depth -type d -empty -delete
+[ -d "$DEST" ] && KEPT+=("$DEST/ (has files Liquid Glass didn't install)")
 
 say "removing the plugin"
 # Only the build Liquid Glass installed: our ownership record plus hyprpm saying it
@@ -54,6 +100,13 @@ elif [ -f "$st" ]; then
     say "leaving hyprpm's HyprGlassLiquid alone: Liquid Glass didn't install it (source: ${url:-unknown})"
 fi
 rm -f "$CONF/hyprpm-repo"
+
+rm -f "$MANIFEST" "$GENERATED" "$CONF/plugin-rev"   # bookkeeping for the files above
+
+if [ ${#KEPT[@]} -gt 0 ]; then
+    say "kept these because they aren't exactly what Liquid Glass installed (changed, added, or from an older version):"
+    printf '    %s\n' "${KEPT[@]}"
+fi
 
 [ "${1:-}" = "--purge" ] && rm -rf "$CONF" && say "removed your saved settings"
 hyprctl reload >/dev/null || true

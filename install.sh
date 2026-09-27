@@ -22,7 +22,8 @@ CONF="$HOME/.config/omarchy-liquid-glass"
 HYPR="$HOME/.config/hypr"
 FOOT="$HOME/.config/foot/foot.ini"
 HOOK="$HOME/.config/omarchy/hooks/theme-set.d/omarchy-liquid-glass"
-DESKTOP="$HOME/.local/share/applications/glass-tuner.desktop"
+DESKTOP="$HOME/.local/share/applications/omarchy-liquid-glass-tuner.desktop"
+MANIFEST="$CONF/installed.sha256"   # "sha256  path" of every file we install; uninstall.sh only removes exact matches
 PLUGIN_REPO="https://github.com/fasi96/hyprglass"
 HYPRGLASS_REV="d7d650e0208ab9b8ea7e9bf5afca6927a9ee6512"   # reviewed plugin commit; bump deliberately
 PLUGIN_SRC="$DEST/hyprglass-src"
@@ -54,6 +55,20 @@ open(path, "w").write(s)
 EOF
 }
 
+# ours = the file is exactly what we installed last time (listed in the manifest)
+ours() { [ -f "$MANIFEST" ] && grep -qxF "$(sha256sum "$1" | cut -d' ' -f1)  $1" "$MANIFEST"; }
+# before writing a path we own: if something else is there, keep a copy of it
+guard() {
+    local f
+    for f in "$@"; do
+        [ -e "$f" ] || continue
+        ours "$f" && continue
+        mkdir -p "$BK/replaced"
+        cp -a "$f" "$BK/replaced/"
+        warn "$f isn't in Liquid Glass's install record (or you changed it; versions before 1.2 kept no record); a copy is in $BK/replaced/"
+    done
+}
+
 # ---------------------------------------------------------------- checks
 for c in hyprctl hyprpm python3 jq chromium foot; do
     command -v "$c" >/dev/null || die "missing: $c"
@@ -69,6 +84,7 @@ case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}':
 
 [[ " $* " == *" --plugin-only "* ]] && LG_PLUGIN_ONLY=1 && LG_YES=1
 [[ " $* " == *" --replace-hyprglass "* ]] && LG_REPLACE_HYPRGLASS=1
+[[ " $* " == *" --hyprpm-update "* ]] && LG_YES_HYPRPM_UPDATE=1
 
 # ---------------------------------------------------------------- consent
 [[ " $* " == *" --yes "* || " $* " == *" -y "* ]] && LG_YES=1
@@ -145,15 +161,50 @@ decide_glass_repos() {
     done < <(glass_repos)
 }
 
+# hyprpm needs headers for the running Hyprland. They are fetched with
+# `hyprpm update`, which also updates every other hyprpm plugin, so run it only
+# when the headers are out of date, and ask first if other plugins are installed.
+NEED_HEADERS=""
+decide_headers() {
+    local cache="${HYPRPM_CACHE:-/var/cache/hyprpm/$USER}" running have others name
+    running=$(hyprctl version -j | jq -r .commit)
+    have=$(sed -n "s/^hash = '\([0-9a-f]*\).*/\1/p" "$cache/state.toml" 2>/dev/null)
+    [ -n "$running" ] && [ "$have" = "$running" ] && { say "hyprpm headers already match this Hyprland"; return; }
+    NEED_HEADERS=1
+    others=$(for st in "$cache"/*/state.toml; do
+                 [ -f "$st" ] || continue
+                 name=$(sed -n "s/^name = '\(.*\)'$/\1/p" "$st")
+                 [[ " ${REMOVE_REPOS[*]} " == *" $name "* ]] || echo "$name"
+             done)
+    [ -z "$others" ] && return
+    warn "hyprpm needs headers for this Hyprland; fetching them runs 'hyprpm update', which also updates your other hyprpm plugins: $(echo $others)"
+    if [ -n "${LG_YES_HYPRPM_UPDATE:-}" ]; then return
+    elif [ -t 0 ] && command -v gum >/dev/null; then gum confirm "Run 'hyprpm update' now?" || die "hyprpm left as it was; nothing changed"
+    elif [ -t 0 ]; then read -rp "Run 'hyprpm update' now? [y/N] " a; [[ $a == [yY]* ]] || die "hyprpm left as it was; nothing changed"
+    else die "hyprpm headers are out of date and 'hyprpm update' would update your other plugins; run in a terminal, or pass --hyprpm-update"
+    fi
+}
+
 plugin_step() {
     # decide about other hyprglass installs before touching anything
     decide_glass_repos
+    decide_headers
 
     say "installing build tools for hyprpm (sudo)"
     sudo pacman -S --needed --noconfirm base-devel cmake meson cpio pkgconf git >/dev/null
 
     say "fetching HyprGlass Liquid at the pinned commit ${HYPRGLASS_REV:0:12}"
-    rm -rf "$PLUGIN_SRC"; mkdir -p "$PLUGIN_SRC"
+    if [ -e "$PLUGIN_SRC" ]; then
+        # ours = still exactly the commit we recorded, nothing modified or added
+        if [ -s "$CONF/plugin-rev" ] && [ "$(git -C "$PLUGIN_SRC" rev-parse HEAD 2>/dev/null)" = "$(cat "$CONF/plugin-rev")" ] \
+           && [ -z "$(git -C "$PLUGIN_SRC" status --porcelain --ignored 2>/dev/null)" ]; then
+            rm -rf "$PLUGIN_SRC"
+        else
+            mkdir -p "$BK/replaced"; mv "$PLUGIN_SRC" "$BK/replaced/"
+            warn "$PLUGIN_SRC wasn't Liquid Glass's untouched copy; moved it to $BK/replaced/"
+        fi
+    fi
+    mkdir -p "$PLUGIN_SRC"
     git -C "$PLUGIN_SRC" init -q
     git -C "$PLUGIN_SRC" remote add origin "$PLUGIN_REPO"
     git -C "$PLUGIN_SRC" fetch -q origin "$HYPRGLASS_REV" || die "could not fetch commit $HYPRGLASS_REV from $PLUGIN_REPO"
@@ -165,12 +216,15 @@ plugin_step() {
     local r
     for r in "${REMOVE_REPOS[@]}"; do say "hyprpm: removing $r"; hyprpm remove "$r"; done
 
-    say "hyprpm: fetching Hyprland headers (can take a few minutes)"
-    hyprpm update
+    if [ -n "$NEED_HEADERS" ]; then
+        say "hyprpm: fetching Hyprland headers (can take a few minutes)"
+        hyprpm update
+    fi
 
     say "hyprpm: building HyprGlass Liquid ${HYPRGLASS_REV:0:12}"
     hyprpm add "$PLUGIN_SRC" "$HYPRGLASS_REV"
     echo HyprGlassLiquid > "$CONF/hyprpm-repo"      # ownership record, checked by owns_repo / uninstall.sh
+    echo "$HYPRGLASS_REV" > "$CONF/plugin-rev"      # uninstall.sh removes $PLUGIN_SRC only if still exactly this
     hyprpm enable hyprglass
     hyprpm reload -n
 }
@@ -182,12 +236,16 @@ fi
 
 # ---------------------------------------------------------------- files
 say "installing Glass Tuner"
-mkdir -p "$DEST" "$CONF"
-cp -r "$SRC/tuner" "$SRC/defaults.json" "$DEST/"
+mkdir -p "$DEST/tuner" "$CONF"
+TUNER_FILES=(tuner.py tuner.html)
+for f in "${TUNER_FILES[@]}"; do guard "$DEST/tuner/$f"; cp "$SRC/tuner/$f" "$DEST/tuner/$f"; done
+guard "$DEST/defaults.json"
+cp "$SRC/defaults.json" "$DEST/"
 [ -f "$CONF/state.json" ] || cp "$SRC/defaults.json" "$CONF/state.json"
 [ -f "$CONF/looks.json" ] || cp "$SRC/looks-default.json" "$CONF/looks.json"
 
 mkdir -p "$(dirname "$DESKTOP")"
+guard "$DESKTOP"
 cat > "$DESKTOP" <<EOF
 [Desktop Entry]
 Name=Glass Tuner
@@ -218,9 +276,11 @@ fi
 
 # ---------------------------------------------------------------- look + hook
 say "applying the Liquid Glass look"
+[ -f "$CONF/generated.sha256" ] || guard "$HYPR/liquid_glass.lua"   # someone else's file at our path: keep a copy
 python3 "$DEST/tuner/tuner.py" --save
 
 mkdir -p "$(dirname "$HOOK")"
+guard "$HOOK" "$FONT_HOOK"
 cat > "$HOOK" <<EOF
 #!/bin/bash
 # omarchy-liquid-glass: keep terminal text following the new theme
@@ -234,6 +294,10 @@ cat > "$FONT_HOOK" <<EOF
 python3 "$DEST/tuner/tuner.py" --foot-sync
 EOF
 chmod +x "$FONT_HOOK"
+
+# record exactly what we installed, so uninstall.sh removes nothing else
+{ for f in "${TUNER_FILES[@]}"; do echo "$DEST/tuner/$f"; done; echo "$DEST/defaults.json"; echo "$DESKTOP"; echo "$HOOK"; echo "$FONT_HOOK"; } \
+    | while IFS= read -r f; do [ -f "$f" ] && sha256sum "$f"; done > "$MANIFEST"
 
 errs=$(hyprctl configerrors)
 [ -z "$errs" ] || warn "Hyprland reports config errors:\n$errs"

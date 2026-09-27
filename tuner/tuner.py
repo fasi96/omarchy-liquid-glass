@@ -10,6 +10,7 @@ OSC 11 escape. Nothing touches your config until you press Save, which writes
 The server quits when the tuner window is closed.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -452,6 +453,23 @@ def apply(s, preview_off=False):
         _last_text[0] = s["text_boost"]
 
 
+def _keep_hand_edits(path):
+    """If path isn't exactly what we last generated (hand-edited, or someone
+    else's file), keep a copy next to it before we write ours."""
+    if not os.path.exists(path):
+        return
+    try:
+        with open(os.path.join(CONF_DIR, "generated.sha256")) as f:
+            want = f.read().split()[0]
+    except (OSError, IndexError):
+        want = ""
+    with open(path, "rb") as f:
+        have = hashlib.sha256(f.read()).hexdigest()
+    if have != want:
+        import shutil
+        shutil.copy2(path, f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}")
+
+
 def save(s, persist=True):
     """Write the config for s. persist=False (theme hook) only writes the
     generated config, not your saved values."""
@@ -479,8 +497,12 @@ def save(s, persist=True):
         + look_lua(s)
         + ("\no.window({ tag = \"terminal\" }, { tag = \"+hyprglass_enabled\" })\n" if s["glass_on"] else "")
     )
+    _keep_hand_edits(LUA_FILE)
     with open(LUA_FILE, "w") as f:
         f.write(lua)
+    # uninstall.sh only deletes liquid_glass.lua if it is still exactly what we wrote
+    with open(os.path.join(CONF_DIR, "generated.sha256"), "w") as f:
+        f.write(f"{hashlib.sha256(lua.encode()).hexdigest()}  {LUA_FILE}\n")
 
     with open(FOOT_INI) as f:
         ini = f.read()
