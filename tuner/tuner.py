@@ -637,6 +637,29 @@ def next_wallpaper():
 # ---------------- http ----------------
 
 TOKEN = secrets.token_urlsafe(24)   # per run; only the tuner window we open knows it
+# The token never goes on a command line (other users can read those): Chromium
+# is started on a launch page in a private folder (0700 dir, 0600 file) that
+# hands the token over in the URL fragment, which is never sent or logged.
+_LAUNCH = {"dir": None}
+
+
+def _write_launcher():
+    import tempfile
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    d = tempfile.mkdtemp(prefix="omarchy-liquid-glass-", dir=runtime if runtime and os.path.isdir(runtime) else None)
+    path = os.path.join(d, "open.html")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(f'<!doctype html><script>location.replace("http://127.0.0.1:{PORT}/#t={TOKEN}")</script>')
+    _LAUNCH["dir"] = d
+    return path
+
+
+def _drop_launcher():
+    d, _LAUNCH["dir"] = _LAUNCH["dir"], None
+    if d:
+        import shutil
+        shutil.rmtree(d, ignore_errors=True)
 
 
 class H(BaseHTTPRequestHandler):
@@ -650,7 +673,10 @@ class H(BaseHTTPRequestHandler):
             return False
         if self.command == "POST" and self.headers.get("Origin") != f"http://127.0.0.1:{PORT}":
             return False
-        return secrets.compare_digest(self.headers.get("X-Tuner-Token", ""), TOKEN)
+        ok = secrets.compare_digest(self.headers.get("X-Tuner-Token", ""), TOKEN)
+        if ok:
+            _drop_launcher()                  # the window has the token now; the launch page can go
+        return ok
 
     def send(self, code, body, ctype="application/json"):
         data = body.encode() if isinstance(body, str) else body
@@ -661,14 +687,16 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path.split("?")[0] == "/":
-            q = self.path.partition("?")[2]
-            if self.headers.get("Host") != f"127.0.0.1:{PORT}" or not secrets.compare_digest(q, f"t={TOKEN}"):
+        if self.path == "/":
+            # the page itself holds no secrets; everything it does needs the token
+            if self.headers.get("Host") != f"127.0.0.1:{PORT}":
                 return self.send(403, "forbidden")
             with open(os.path.join(HERE, "tuner.html"), "rb") as f:
-                page = f.read().replace(b"</head>", b"<script>{const t=new URLSearchParams(location.search).get('t'),"
-                                        b"f=window.fetch;window.fetch=(u,o={})=>f(u,{...o,headers:{...(o.headers||{}),"
-                                        b"'X-Tuner-Token':t}})}</script></head>", 1)
+                page = f.read().replace(b"</head>", (
+                    b"<script>{const m=location.hash.match(/^#t=([\\w-]+)$/);"
+                    b"if(m){sessionStorage.setItem('t',m[1]);history.replaceState(null,'','/')}"
+                    b"const t=sessionStorage.getItem('t')||'',f=window.fetch;"
+                    b"window.fetch=(u,o={})=>f(u,{...o,headers:{...(o.headers||{}),'X-Tuner-Token':t}})}</script></head>"), 1)
             self.send(200, page, "text/html; charset=utf-8")
         elif not self._trusted():
             self.send(403, "{}")
@@ -732,10 +760,11 @@ BROWSER_PROFILE = os.path.join(HOME, ".cache/omarchy-liquid-glass/tuner-browser"
 def open_window():
     subprocess.Popen(
         ["uwsm-app", "--", "chromium", f"--user-data-dir={BROWSER_PROFILE}", "--no-first-run",
-         "--ozone-platform=wayland", f"--app=http://127.0.0.1:{PORT}/?t={TOKEN}"],
+         "--ozone-platform=wayland", f"--app=file://{_write_launcher()}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     c = wait_title(TITLE, 15)
+    threading.Timer(20, _drop_launcher).start()   # in case the page never asked for anything
     if not c:
         return
     addr = c["address"]
