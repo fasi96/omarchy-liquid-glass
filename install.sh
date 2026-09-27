@@ -138,9 +138,9 @@ fi
 
 # ---------------------------------------------------------------- backups
 BK="$CONF/backup-$(date +%Y%m%d-%H%M%S)"
-mkdir -p "$BK"
+mkdir -p -m 700 "$BK"                       # backups hold copies of your config: private folder
 for f in "$HYPR/hyprland.lua" "$HYPR/bindings.lua" "$HYPR/autostart.lua" "$FOOT"; do
-    [ -f "$f" ] && cp "$f" "$BK/"
+    [ -f "$f" ] && cp -p "$f" "$BK/"          # keeps each file's own permissions
 done
 say "backups in $BK"
 

@@ -56,16 +56,41 @@ def is_ours(path, block):
 
 
 def write_atomic(path, text):
+    """Replace path's contents atomically, through symlinks. The temp file is
+    created private (mkstemp: 0600, unpredictable name, O_EXCL) in the same
+    folder; the original file's mode is applied before it takes its place, so
+    the contents are never readable by anyone the original didn't allow."""
+    import tempfile
     real = os.path.realpath(path)
-    os.makedirs(os.path.dirname(real), exist_ok=True)
-    tmp = f"{real}.tmp-{os.getpid()}"
-    with open(tmp, "w") as f:
-        f.write(text)
+    folder = os.path.dirname(real)
+    os.makedirs(folder, exist_ok=True)
     try:
-        os.chmod(tmp, os.stat(real).st_mode & 0o7777)
-    except OSError:
-        pass
-    os.replace(tmp, real)
+        mode = os.stat(real).st_mode & 0o7777
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=f".{os.path.basename(real)}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, real)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def write_private(path, data):
+    """Create a new file readable only by you (for copies of your own config)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb" if isinstance(data, bytes) else "w") as f:
+        f.write(data)
 
 
 def keep_copy(path, block, backup_dir):
@@ -76,8 +101,7 @@ def keep_copy(path, block, backup_dir):
     while os.path.exists(out):
         n += 1
         out = f"{dest}.{n}"
-    with open(out, "w") as f:
-        f.write(block + "\n")
+    write_private(out, block + "\n")        # your config may be private: the copy is 0600
     return out
 
 

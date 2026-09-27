@@ -474,18 +474,41 @@ def apply(s, preview_off=False):
 
 
 def write_atomic(path, text):
-    """Write via a temp file + rename next to the real file (so a symlinked
-    dotfile stays a symlink, and a crash never leaves a half-written file)."""
+    """Replace path's contents atomically, through symlinks. The temp file is
+    created private (mkstemp: 0600, unpredictable name, O_EXCL) in the same
+    folder; the original file's mode is applied before it takes its place, so
+    the contents are never readable by anyone the original didn't allow."""
+    import tempfile
     real = os.path.realpath(path)
-    os.makedirs(os.path.dirname(real), exist_ok=True)
-    tmp = f"{real}.tmp-{os.getpid()}"
-    with open(tmp, "w") as f:
-        f.write(text)
+    folder = os.path.dirname(real)
+    os.makedirs(folder, exist_ok=True)
     try:
-        os.chmod(tmp, os.stat(real).st_mode & 0o7777)
-    except OSError:
-        pass
-    os.replace(tmp, real)
+        mode = os.stat(real).st_mode & 0o7777
+    except FileNotFoundError:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=f".{os.path.basename(real)}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, real)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def write_private(path, data):
+    """Create a new file readable only by you (for copies of your own config)."""
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb" if isinstance(data, bytes) else "w") as f:
+        f.write(data)
 
 
 class _Lock:
@@ -538,13 +561,13 @@ def _keep_hand_edits(path):
     with open(path, "rb") as f:
         have = hashlib.sha256(f.read()).hexdigest()
     if have != want:
-        import shutil
         base, n = f"{path}.bak-{time.strftime('%Y%m%d-%H%M%S')}", 1
         dest = base
         while os.path.exists(dest):           # never overwrite an earlier copy
             n += 1
             dest = f"{base}-{n}"
-        shutil.copy2(path, dest)
+        with open(path, "rb") as f:
+            write_private(dest, f.read())     # 0600 from the start (copy2 would create it with default perms first)
 
 
 def save(s, persist=True):
