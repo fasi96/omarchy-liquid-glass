@@ -44,7 +44,7 @@ cd omarchy-liquid-glass
 
 Either way, open a **new terminal** afterwards, and press **Super+Ctrl+G** for Glass Tuner (or search "Glass Tuner" in the launcher).
 
-Setup builds the plugin with `hyprpm`, which installs build tools and Hyprland headers, so it asks for your password and takes a few minutes the first time. Everything it adds to your config is fenced with `omarchy-liquid-glass` markers, and it backs up every file it touches to `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already have upstream HyprGlass in hyprpm, setup asks before replacing it, since both provide the same plugin.
+Setup lists everything it will do and asks first; without a terminal to ask in it changes nothing unless you pass `--yes`. It builds the plugin with `hyprpm`, so it may install missing build tools (`base-devel cmake meson cpio pkgconf git`, shown in the list) and fetch Hyprland headers, which asks for your password and takes a few minutes the first time. Everything it adds to your config is fenced with `omarchy-liquid-glass` markers. Before it starts, it copies hyprland.lua, bindings.lua, autostart.lua and foot.ini, plus anything already sitting at a path it installs to, into `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already have upstream HyprGlass in hyprpm, setup asks before replacing it (both provide the same plugin), and puts it back if the new build fails.
 
 ## Glass Tuner
 
@@ -62,14 +62,16 @@ Changes show live; nothing sticks until you press **Save**. Use **Hold to compar
 ## Uninstall
 
 ```bash
-./uninstall.sh            # removes everything it added; keeps your saved looks
-./uninstall.sh --purge    # also deletes ~/.config/omarchy-liquid-glass
+~/.local/share/omarchy-liquid-glass/uninstall.sh            # removes what it added; keeps your saved looks
+~/.local/share/omarchy-liquid-glass/uninstall.sh --purge    # also removes your saved looks and settings
 ```
 
-Installed as a plugin? Run the same script from the plugin folder, then remove the bar button:
+Setup keeps a copy of `uninstall.sh` there, so it works however you installed. It removes only what is still exactly as Liquid Glass installed it, and lists anything you changed or added instead of deleting it. The backups of your own files in `~/.config/omarchy-liquid-glass/backup-*/` are never deleted, not even by `--purge`; remove that folder yourself when you don't need them.
+
+Installed as a plugin? Run the uninstall first, then remove the bar button:
 
 ```bash
-~/.config/omarchy/plugins/io.github.fasi96.liquid-glass/uninstall.sh
+~/.local/share/omarchy-liquid-glass/uninstall.sh
 omarchy plugin remove io.github.fasi96.liquid-glass
 ```
 
@@ -81,6 +83,7 @@ Hyprland plugins are compiled for one Hyprland version, so after an update the g
 
 - **The native plugin is pinned.** The installer fetches one reviewed commit of [HyprGlass Liquid](https://github.com/fasi96/hyprglass) (`HYPRGLASS_REV` in `install.sh`) into `~/.local/share/omarchy-liquid-glass/hyprglass-src`, checks the commit hash, and has `hyprpm` build that exact commit from the local copy. Newer commits on GitHub are never built until the pin is bumped in a new release.
 - **Other HyprGlass installs are yours.** Only one `hyprglass` plugin can be loaded at a time. Setup replaces only the build Liquid Glass itself installed (it keeps a record, and checks that hyprpm built it from the pinned local copy). If you have upstream HyprGlass or your own copy of the fork in hyprpm, setup shows where it came from and asks before removing it; without a terminal to ask in, it stops and changes nothing (`--replace-hyprglass` answers yes). Uninstall only removes Liquid Glass's own build.
+- **Glass Tuner only listens to itself.** Its local page (127.0.0.1) needs a random per-run token that only the tuner window gets, checks the Host and Origin, and every value is range-checked before it reaches the generated config.
 - **Uninstall only deletes what it installed.** The installer records a sha256 of every file it installs (Glass Tuner, the desktop entry, the hooks), and Glass Tuner records one each time it writes `liquid_glass.lua`. `./uninstall.sh` removes a file only if it still matches; anything you changed or added is kept and listed. The pinned plugin source is removed only if git shows it is still exactly the pinned commit. If one of these paths already held something else at install time, the installer keeps a copy in its backup folder first.
 - **Other hyprpm plugins are left alone.** `hyprpm update` (needed only when hyprpm's headers don't match your Hyprland) also updates every other hyprpm plugin, so setup skips it when the headers are current, and otherwise names your other plugins and asks first (`--hyprpm-update` answers yes).
 - **Your foot config is only ever appended to.** Everything Glass Tuner sets (transparency, padding, text colour, font weight, bold-in-bright) lives in one fenced `omarchy-liquid-glass` block at the end of `foot.ini`; foot lets later values win, so your own lines are never edited. The Hyprland files get fenced blocks the same way. `./uninstall.sh` removes exactly those blocks.

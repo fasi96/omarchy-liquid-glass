@@ -419,7 +419,7 @@ $('save').onclick = async () => {
   const r = await (await fetch('/save', { method: 'POST', body: JSON.stringify({ state: S, look }) })).json();
   SAVED = { ...S };
   LOOKS = await (await fetch('/looks')).json(); renderLooks(sel);
-  r.errors ? status('Saved, but Hyprland reported: ' + r.errors, 'err') : status('Saved to hyprglass.lua and foot.ini', 'ok');
+  r.errors ? status('Saved, but Hyprland reported: ' + r.errors, 'err') : status('Saved to liquid_glass.lua and foot.ini', 'ok');
 };
 
 load();

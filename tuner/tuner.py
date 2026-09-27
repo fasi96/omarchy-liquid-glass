@@ -10,8 +10,11 @@ OSC 11 escape. Nothing touches your config until you press Save, which writes
 The server quits when the tuner window is closed.
 """
 
+import fcntl
 import hashlib
 import json
+import math
+import secrets
 import os
 import re
 import socket
@@ -179,14 +182,19 @@ def clean(raw):
     s = defaults()
     for k, (lo, hi, _) in {**GLASS, **LIGHT, **EDGE, **LOOK}.items():
         if k in raw:
+            if isinstance(raw[k], bool):
+                continue
             try:
-                v = min(max(float(raw[k]), lo), hi)
+                v = float(raw[k])
             except (TypeError, ValueError):
                 continue
+            if not math.isfinite(v):          # NaN/inf would pass min/max and reach Lua
+                continue
+            v = min(max(v, lo), hi)
             s[k] = int(round(v)) if k in INT_KEYS else round(v, 3)
     for k in BOOLS:
-        if k in raw:
-            s[k] = bool(raw[k])
+        if isinstance(raw.get(k), bool):      # only real JSON booleans ("false" is not false)
+            s[k] = raw[k]
     if raw.get("font_weight") in FONT_WEIGHTS:
         s["font_weight"] = raw["font_weight"]
     for k in ("tint", "rim_color", "light_color", "bevel_color"):
@@ -402,10 +410,13 @@ FOOT_END = "# <<< omarchy-liquid-glass"
 _FOOT_BLOCK = re.compile(r"\n?" + re.escape(FOOT_BEGIN) + r".*?" + re.escape(FOOT_END) + r"\n?", re.S)
 
 
-def write_foot(s, ini):
+def write_foot(s, ini, create=True):
     """Everything we set in foot.ini lives in one fenced block at the end of
     the file (later values win in foot). The user's own lines are never
     edited or removed, and uninstall.sh just drops the block."""
+    has_block = bool(_FOOT_BLOCK.search(ini))
+    if not has_block and not create:
+        return ini                            # you removed our block: hooks don't put it back
     user = _FOOT_BLOCK.sub("\n", ini).rstrip("\n")
     main = ["[main]"]
     m = re.search(r"(?m)^font=([^\n]*)$", user)             # the user's font (Omarchy keeps it current)
@@ -419,6 +430,9 @@ def write_foot(s, ini):
         colors.append(f"foreground={text_color(s['text_boost'])}")
     block = "\n".join([FOOT_BEGIN, "# Liquid Glass (managed by Glass Tuner; ./uninstall.sh removes this block)"]
                       + main + colors + [FOOT_END])
+    if has_block:                             # update it where it is, so your lines after it still win
+        return _FOOT_BLOCK.sub(lambda m: ("\n" if m.group(0).startswith("\n") else "") + block
+                               + ("\n" if m.group(0).endswith("\n") else ""), ini, count=1)
     return user + "\n\n" + block + "\n"
 
 
@@ -453,6 +467,49 @@ def apply(s, preview_off=False):
         _last_text[0] = s["text_boost"]
 
 
+def write_atomic(path, text):
+    """Write via a temp file + rename next to the real file (so a symlinked
+    dotfile stays a symlink, and a crash never leaves a half-written file)."""
+    real = os.path.realpath(path)
+    os.makedirs(os.path.dirname(real), exist_ok=True)
+    tmp = f"{real}.tmp-{os.getpid()}"
+    with open(tmp, "w") as f:
+        f.write(text)
+    try:
+        os.chmod(tmp, os.stat(real).st_mode & 0o7777)
+    except OSError:
+        pass
+    os.replace(tmp, real)
+
+
+class _Lock:
+    """One writer at a time (Save, theme hook, font hook)."""
+    def __enter__(self):
+        os.makedirs(CONF_DIR, exist_ok=True)
+        self.f = open(os.path.join(CONF_DIR, ".lock"), "w")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+    def __exit__(self, *a):
+        fcntl.flock(self.f, fcntl.LOCK_UN)
+        self.f.close()
+
+
+def _read_foot():
+    try:
+        with open(FOOT_INI) as f:
+            return f.read()
+    except OSError:
+        return None                           # no foot.ini (not using foot): skip the foot step
+
+
+def _update_foot(s, create):
+    ini = _read_foot()
+    if ini is None:
+        return
+    new = write_foot(s, ini, create=create)
+    if new != ini:
+        write_atomic(FOOT_INI, new)
+
+
 def _keep_hand_edits(path):
     """If path isn't exactly what we last generated (hand-edited, or someone
     else's file), keep a copy next to it before we write ours."""
@@ -480,11 +537,13 @@ def save(s, persist=True):
     generated config, not your saved values."""
     _live["state"] = s
     os.makedirs(CONF_DIR, exist_ok=True)
+    with _Lock():
+        return _save(s, persist)
+
+
+def _save(s, persist):
     if persist:
-        target = theme_state_file() or STATE_FILE
-        os.makedirs(os.path.dirname(target), exist_ok=True)
-        with open(target, "w") as f:
-            json.dump(s, f, indent=2)
+        write_atomic(theme_state_file() or STATE_FILE, json.dumps(s, indent=2))
 
     glass_block = glass_lua(s).replace("\n", "\n  ").rstrip()
     light_block = light_lua(s).replace("\n", "\n  ").rstrip()
@@ -503,17 +562,11 @@ def save(s, persist=True):
         + ("\no.window({ tag = \"terminal\" }, { tag = \"+hyprglass_enabled\" })\n" if s["glass_on"] else "")
     )
     _keep_hand_edits(LUA_FILE)
-    with open(LUA_FILE, "w") as f:
-        f.write(lua)
+    write_atomic(LUA_FILE, lua)
     # uninstall.sh only deletes liquid_glass.lua if it is still exactly what we wrote
-    with open(os.path.join(CONF_DIR, "generated.sha256"), "w") as f:
-        f.write(f"{hashlib.sha256(lua.encode()).hexdigest()}  {LUA_FILE}\n")
+    write_atomic(os.path.join(CONF_DIR, "generated.sha256"), f"{hashlib.sha256(lua.encode()).hexdigest()}  {LUA_FILE}\n")
 
-    with open(FOOT_INI) as f:
-        ini = f.read()
-    ini = write_foot(s, ini)
-    with open(FOOT_INI, "w") as f:
-        f.write(ini)
+    _update_foot(s, create=persist)           # a Save (re)creates the foot block; hooks only update it
 
     subprocess.run(["hyprctl", "reload"], capture_output=True)
     errs = subprocess.run(["hyprctl", "configerrors"], capture_output=True, text=True).stdout.strip()
@@ -583,9 +636,21 @@ def next_wallpaper():
 
 # ---------------- http ----------------
 
+TOKEN = secrets.token_urlsafe(24)   # per run; only the tuner window we open knows it
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
+
+    def _trusted(self):
+        """Only the tuner page we opened: right Host (no DNS rebinding), and the
+        per-run token (other local programs and web pages don't have it)."""
+        if self.headers.get("Host") != f"127.0.0.1:{PORT}":
+            return False
+        if self.command == "POST" and self.headers.get("Origin") != f"http://127.0.0.1:{PORT}":
+            return False
+        return secrets.compare_digest(self.headers.get("X-Tuner-Token", ""), TOKEN)
 
     def send(self, code, body, ctype="application/json"):
         data = body.encode() if isinstance(body, str) else body
@@ -596,9 +661,17 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
-        if self.path == "/":
+        if self.path.split("?")[0] == "/":
+            q = self.path.partition("?")[2]
+            if self.headers.get("Host") != f"127.0.0.1:{PORT}" or not secrets.compare_digest(q, f"t={TOKEN}"):
+                return self.send(403, "forbidden")
             with open(os.path.join(HERE, "tuner.html"), "rb") as f:
-                self.send(200, f.read(), "text/html; charset=utf-8")
+                page = f.read().replace(b"</head>", b"<script>{const t=new URLSearchParams(location.search).get('t'),"
+                                        b"f=window.fetch;window.fetch=(u,o={})=>f(u,{...o,headers:{...(o.headers||{}),"
+                                        b"'X-Tuner-Token':t}})}</script></head>", 1)
+            self.send(200, page, "text/html; charset=utf-8")
+        elif not self._trusted():
+            self.send(403, "{}")
         elif self.path == "/looks":
             self.send(200, json.dumps(load_looks()))
         elif self.path == "/state":
@@ -609,8 +682,7 @@ class H(BaseHTTPRequestHandler):
             self.send(404, "{}")
 
     def do_POST(self):
-        # Only accept same-origin requests from the tuner page itself.
-        if self.headers.get("Origin") not in (None, f"http://127.0.0.1:{PORT}"):
+        if not self._trusted():
             return self.send(403, "{}")
         n = int(self.headers.get("Content-Length") or 0)
         try:
@@ -654,10 +726,13 @@ class H(BaseHTTPRequestHandler):
             self.send(404, "{}")
 
 
+BROWSER_PROFILE = os.path.join(HOME, ".cache/omarchy-liquid-glass/tuner-browser")
+
+
 def open_window():
     subprocess.Popen(
-        ["uwsm-app", "--", "chromium", f"--user-data-dir={HOME}/.cache/glass-tuner", "--no-first-run",
-         "--ozone-platform=wayland", f"--app=http://127.0.0.1:{PORT}/"],
+        ["uwsm-app", "--", "chromium", f"--user-data-dir={BROWSER_PROFILE}", "--no-first-run",
+         "--ozone-platform=wayland", f"--app=http://127.0.0.1:{PORT}/?t={TOKEN}"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     c = wait_title(TITLE, 15)
@@ -706,17 +781,39 @@ def theme_hook():
     colour is re-derived from the new theme and pushed to open terminals."""
     s = load_state()
     if theme_state_file() or _glass_was_themed():
-        save(s, persist=False)                    # writes liquid_glass.lua + foot.ini, reloads
+        save(s, persist=False)                    # writes liquid_glass.lua + updates the foot block, reloads
         _mark_themed(bool(theme_state_file()))
         push_foot_alpha(s["foot_alpha"])
     else:
-        with open(FOOT_INI) as f:
-            ini = f.read()
-        new = write_foot(s, ini)
-        if new != ini:
-            with open(FOOT_INI, "w") as f:
-                f.write(new)
+        with _Lock():
+            _update_foot(s, create=False)
     push_foot_text(s["text_boost"])
+
+
+def legacy_foot():
+    """Versions before 1.1 rewrote your own pad= line in foot.ini and saved the
+    original in foot-pad.orig. Put it back, but only if that line is still
+    exactly what the old version wrote (otherwise you've changed it since)."""
+    orig_file = os.path.join(CONF_DIR, "foot-pad.orig")
+    try:
+        with open(orig_file) as f:
+            orig = f.read().strip()
+    except OSError:
+        return
+    ini = _read_foot()
+    base = _read(STATE_FILE) or {}
+    pad = base.get("foot_pad")
+    if ini is not None and re.fullmatch(r"pad=\S+", orig) and isinstance(pad, (int, float)):
+        old = f"pad={int(pad)}x{int(pad)}"
+        user = _FOOT_BLOCK.sub("\n", ini)
+        m = re.search(r"(?m)^pad=.*$", user)
+        if m and m.group(0) == old and old != orig:
+            new = ini.replace(m.group(0), orig, 1)
+            write_atomic(FOOT_INI, new)
+            print(f"restored your {orig} in foot.ini")
+        elif m and m.group(0) != orig:
+            print(f"left your foot.ini {m.group(0)} as it is (you changed it after the old version wrote it)")
+    os.remove(orig_file)
 
 
 THEMED_MARK = os.path.join(CONF_DIR, ".theme-look-active")
@@ -737,13 +834,11 @@ def main():
     if "--theme-hook" in sys.argv:
         return theme_hook()
     if "--foot-sync" in sys.argv:     # font-set hook
-        with open(FOOT_INI) as f:
-            ini = f.read()
-        new = write_foot(load_state(), ini)
-        if new != ini:
-            with open(FOOT_INI, "w") as f:
-                f.write(new)
+        with _Lock():
+            _update_foot(load_state(), create=False)
         return
+    if "--legacy-foot" in sys.argv:   # install/uninstall: undo the pad= edit versions before 1.1 made
+        return legacy_foot()
     if "--toggle" in sys.argv:        # bar button: glass on/off, saved so it sticks
         s = load_state()
         s["glass_on"] = not s["glass_on"]

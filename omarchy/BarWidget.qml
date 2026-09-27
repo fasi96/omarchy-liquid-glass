@@ -17,7 +17,8 @@ BarWidget {
   moduleName: "io.github.fasi96.liquid-glass"
 
   readonly property string home: Quickshell.env("HOME")
-  readonly property string repoDir: String(Qt.resolvedUrl("..")).replace(/^file:\/\//, "").replace(/\/$/, "")
+  // the plugin folder (Qt gives a percent-encoded file:// URL)
+  readonly property string repoDir: decodeURIComponent(String(Qt.resolvedUrl("..")).replace(/^file:\/\//, "")).replace(/\/$/, "")
   readonly property string tuner: home + "/.local/share/omarchy-liquid-glass/tuner/tuner.py"
 
   property bool installed: false
@@ -64,15 +65,17 @@ BarWidget {
     onTriggered: probe.running = true
   }
 
+  function q(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }   // shell-quote
+
   function terminal(cmd) {
     Util.execArgv(["omarchy-launch-floating-terminal-with-presentation", cmd])
   }
 
   function clicked(b) {
     if (mode === "setup") {
-      terminal("cd '" + repoDir + "' && ./install.sh")
+      terminal("cd " + q(repoDir) + " && ./install.sh")
     } else if (mode === "rebuild") {
-      terminal("cd '" + repoDir + "' && ./install.sh --plugin-only && hyprctl reload")
+      terminal("cd " + q(repoDir) + " && ./install.sh --plugin-only && hyprctl reload")
     } else if (b === Qt.RightButton) {
       Util.execArgv(["python3", tuner, "--toggle"])
     } else {
