@@ -194,12 +194,49 @@ def clean(raw):
     return s
 
 
-def load_state():
+# A theme can ship its own glass look (liquid-glass.json next to its colors.toml).
+# While such a theme is active, the tuner shows that look, and Save keeps your
+# tweaks per theme (themes/<theme>.json) so your own look in state.json stays put.
+THEME_DIR = os.path.join(HOME, ".local/state/omarchy/current/theme")
+THEME_NAME_FILE = os.path.join(HOME, ".local/state/omarchy/current/theme.name")
+
+
+def theme_name():
     try:
-        with open(STATE_FILE) as f:
-            return clean(json.load(f))
+        with open(THEME_NAME_FILE) as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def theme_state_file():
+    """Where the active theme's look is saved, or None when the theme has no look."""
+    name = theme_name()
+    mine = os.path.join(CONF_DIR, "themes", re.sub(r"[^A-Za-z0-9._-]+", "-", name) + ".json")
+    if name and os.path.exists(mine):
+        return mine
+    if os.path.exists(os.path.join(THEME_DIR, "liquid-glass.json")):
+        return mine
+    return None
+
+
+def _read(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
     except (OSError, ValueError):
-        return defaults()
+        return None
+
+
+def load_state():
+    base = _read(STATE_FILE)
+    s = clean(base) if isinstance(base, dict) else defaults()
+    tf = theme_state_file()
+    if tf:
+        look = _read(tf) if os.path.exists(tf) else _read(os.path.join(THEME_DIR, "liquid-glass.json"))
+        if isinstance(look, dict):
+            s = clean({**s, **look})
+    return s
 
 
 # ---------------- named looks ----------------
@@ -410,11 +447,16 @@ def apply(s, preview_off=False):
         _last_text[0] = s["text_boost"]
 
 
-def save(s):
+def save(s, persist=True):
+    """Write the config for s. persist=False (theme hook) only writes the
+    generated config, not your saved values."""
     _live["state"] = s
     os.makedirs(CONF_DIR, exist_ok=True)
-    with open(STATE_FILE, "w") as f:
-        json.dump(s, f, indent=2)
+    if persist:
+        target = theme_state_file() or STATE_FILE
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "w") as f:
+            json.dump(s, f, indent=2)
 
     glass_block = glass_lua(s).replace("\n", "\n  ").rstrip()
     light_block = light_lua(s).replace("\n", "\n  ").rstrip()
@@ -629,16 +671,36 @@ def watch_reloads():
 
 
 def theme_hook():
-    """Run by the Omarchy theme-set hook: re-derive the brightened text colour
-    from the new theme, write it to foot.ini and push it to open terminals."""
+    """Run by the Omarchy theme-set hook. A theme that ships a glass look gets
+    it (and a regular theme gets your own look back); either way the text
+    colour is re-derived from the new theme and pushed to open terminals."""
     s = load_state()
-    with open(FOOT_INI) as f:
-        ini = f.read()
-    new = write_foot_text(s, ini)
-    if new != ini:
-        with open(FOOT_INI, "w") as f:
-            f.write(new)
+    if theme_state_file() or _glass_was_themed():
+        save(s, persist=False)                    # writes liquid_glass.lua + foot.ini, reloads
+        _mark_themed(bool(theme_state_file()))
+        push_foot_alpha(s["foot_alpha"])
+    else:
+        with open(FOOT_INI) as f:
+            ini = f.read()
+        new = write_foot_text(s, ini)
+        if new != ini:
+            with open(FOOT_INI, "w") as f:
+                f.write(new)
     push_foot_text(s["text_boost"])
+
+
+THEMED_MARK = os.path.join(CONF_DIR, ".theme-look-active")
+
+
+def _glass_was_themed():
+    return os.path.exists(THEMED_MARK)
+
+
+def _mark_themed(on):
+    if on:
+        open(THEMED_MARK, "w").close()
+    elif os.path.exists(THEMED_MARK):
+        os.remove(THEMED_MARK)
 
 
 def main():
