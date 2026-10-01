@@ -118,7 +118,7 @@ summary() {
     echo
     echo "Liquid Glass will:"
     [ ${#MISSING_PKGS[@]} -gt 0 ] && echo "  - install build tools with sudo: pacman -S --needed ${MISSING_PKGS[*]}"
-    [ -z "${LG_SKIP_PLUGIN:-}" ] && echo "  - build HyprGlass Liquid ${HYPRGLASS_REV:0:12} with hyprpm and load it (asks for your password)"
+    [ -z "${LG_SKIP_PLUGIN:-}" ] && echo "  - build HyprGlass Liquid ${HYPRGLASS_REV:0:12} with hyprpm and load it (hyprpm asks for your password at each step, so a few times)"
     if [ -z "${LG_PLUGIN_ONLY:-}" ]; then
         echo "  - write ~/.config/hypr/liquid_glass.lua, and add fenced blocks to hyprland.lua, autostart.lua and bindings.lua"
         echo "  - add a fenced block at the end of ~/.config/foot/foot.ini (your own lines are not edited)"

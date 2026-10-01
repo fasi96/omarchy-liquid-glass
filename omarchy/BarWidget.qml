@@ -29,12 +29,20 @@ BarWidget {
 
   // installed = the installer has put Glass Tuner in place
   FileView {
+    id: tunerFile
     path: root.tuner
     watchChanges: true
     printErrors: false
     onLoaded: root.installed = true
     onLoadFailed: root.installed = false
     onFileChanged: reload()
+  }
+  // a file that doesn't exist yet can't be watched, so look again while in setup mode
+  Timer {
+    interval: 2000
+    repeat: true
+    running: !root.installed
+    onTriggered: tunerFile.reload()
   }
 
   // glass on/off, as saved by the tuner
@@ -58,7 +66,7 @@ BarWidget {
     }
   }
   Timer {
-    interval: 30000
+    interval: root.pluginLoaded ? 30000 : 3000   // notice a rebuild quickly
     repeat: true
     running: root.installed
     triggeredOnStart: true
