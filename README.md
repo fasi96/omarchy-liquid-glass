@@ -32,7 +32,7 @@ It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux, 
 omarchy plugin add https://github.com/fasi96/omarchy-liquid-glass --enable
 ```
 
-Click the new glass button on the bar. The first click opens a terminal that shows what Liquid Glass will change and asks before doing anything. After setup, the button opens Glass Tuner, and a right click turns the glass on and off. If a Hyprland update ever unloads the glass plugin, the button shows `!` and one click rebuilds it.
+Click the new glass button on the bar. The first click opens a terminal that shows what Liquid Glass will change and asks before doing anything. After setup, the button opens Glass Tuner, and a right click turns the glass on and off. Off puts your theme's own terminals, borders and gaps back; your glass settings stay saved for when you turn it on again. If a Hyprland update ever unloads the glass plugin, the button shows `!` and one click rebuilds it.
 
 **Or with the script:**
 
@@ -92,6 +92,7 @@ Hyprland plugins are compiled for one Hyprland version, so after an update the g
 ## Credits
 
 - [HyprGlass](https://github.com/hyprnux/hyprglass) by hyprnux (BSD-3-Clause): the Liquid Glass shader and plugin this is built on.
+- [Ric Lewis](https://github.com/keylimesoda): turning the glass off restores your theme (#1).
 - Motion design follows Apple's [Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219/) (WWDC25): light and movement come from what you do.
 
 This package (installer + Glass Tuner) is MIT-licensed. The plugin keeps HyprGlass's BSD-3-Clause license.
