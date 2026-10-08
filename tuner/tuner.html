@@ -395,6 +395,16 @@ async function load() {
   renderLooks(LOOKS.active || '');
 }
 
+// the bar button turns the glass on and off while the tuner is open: follow it,
+// so a later slider move or Save doesn't switch it back
+setInterval(async () => {
+  if (document.hidden || !('glass_on' in SAVED)) return;
+  try {
+    const on = (await (await fetch('/state')).json()).state.glass_on;
+    if (on !== SAVED.glass_on) { S.glass_on = SAVED.glass_on = on; build(); }
+  } catch (e) {}
+}, 2000);
+
 const cmp = $('compare');
 const hold = on => { compare = on; cmp.classList.toggle('held', on); push(); };
 cmp.onmousedown = () => hold(true);

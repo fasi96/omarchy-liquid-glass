@@ -113,6 +113,16 @@ class TunerTests(unittest.TestCase):
         alpha.assert_called_once_with(0.9, '112233')
         text.assert_called_once_with(0, 'aabbcc')
 
+    def test_open_tuner_follows_bar_toggle_after_reload(self):
+        live = tuner.defaults()
+        live.update(glass_on=True, foot_alpha=0.4)          # unsaved slider value in the open tuner
+        with patch.object(tuner, 'load_state', return_value=dict(live, glass_on=False, foot_alpha=0.25)):
+            s = tuner.follow_saved_switch(live)
+        self.assertFalse(s['glass_on'])                      # bar turned it off: stays off
+        self.assertEqual(s['foot_alpha'], 0.4)               # unsaved tuning kept
+        with patch.object(tuner, 'load_state', return_value=dict(live)):
+            self.assertIs(tuner.follow_saved_switch(live), live)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -862,6 +862,13 @@ def open_window():
     os._exit(0)
 
 
+def follow_saved_switch(s):
+    """The bar button saves glass on/off and reloads. The tuner's unsaved values
+    go back on screen after a reload, but the on/off follows what was saved."""
+    on = load_state()["glass_on"]
+    return s if s["glass_on"] == on else dict(s, glass_on=on)
+
+
 def watch_reloads():
     """A theme change (or anything else) runs `hyprctl reload`, which puts the
     saved config back. While the tuner is open, put the values you're still
@@ -885,6 +892,7 @@ def watch_reloads():
             time.sleep(1.2)   # let theme-set finish recolouring terminals first
             s = _live["state"]
             if s is not None:
+                s = _live["state"] = follow_saved_switch(s)
                 hypr_eval(glass_lua(s) + (edge_lua(s) if edge_supported() else "")
                           + (light_lua(s) if light_supported() else "") + look_lua(s))
             sync_foot(s or load_state(), force=True)
