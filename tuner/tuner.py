@@ -10,6 +10,7 @@ OSC 11 escape. Nothing touches your config until you press Save, which writes
 The server quits when the tuner window is closed.
 """
 
+import configparser
 import fcntl
 import hashlib
 import json
@@ -327,7 +328,7 @@ def light_lua(s, preview_off=False):
         vals["light_strength"] = vals["light_bend"] = 0.0
     if not (live and s["glow_on"]):
         vals["glow_strength"] = vals["glow_flex"] = 0.0
-    if not s["materialize_on"]:
+    if not (live and s["materialize_on"]):
         vals["materialize_duration"] = 0.0
     if not (live and s["parallax_on"]):
         vals["parallax_strength"] = 0.0
@@ -369,6 +370,8 @@ def rim(s, scale):
 
 
 def look_lua(s):
+    if not s["glass_on"]:
+        return ""  # Reload leaves the theme/user border, geometry and animations intact.
     active, inactive = (rim(s, 1), rim(s, s["rim_inactive"])) if s["glass_border"] else NEON
     return (
         "hl.config({\n"
@@ -400,9 +403,9 @@ def foot_ttys():
     return ttys
 
 
-def push_foot_text(boost):
+def push_foot_text(boost, foreground=None):
     """Recolour the text of every open foot window (OSC 10)."""
-    seq = f"\033]10;#{text_color(boost)}\033\\"
+    seq = f"\033]10;#{foreground or text_color(boost)}\033\\"
     for t in foot_ttys():
         try:
             with open(t, "w") as f:
@@ -420,6 +423,8 @@ def write_foot(s, ini, create=True):
     """Everything we set in foot.ini lives in one fenced block at the end of
     the file (later values win in foot). The user's own lines are never
     edited or removed, and uninstall.sh just drops the block."""
+    if not s["glass_on"]:
+        return _FOOT_BLOCK.sub("", ini)
     has_block = bool(_FOOT_BLOCK.search(ini))
     if not has_block and not create:
         return ini                            # you removed our block: hooks don't put it back
@@ -442,8 +447,44 @@ def write_foot(s, ini, create=True):
     return user + "\n\n" + block + "\n"
 
 
-def push_foot_alpha(alpha):
-    seq = f"\033]11;[{int(round(alpha * 100))}]#{foot_bg()}\033\\"
+def base_foot_colors():
+    """Read the user's original foot config and its includes, without our block."""
+    config = configparser.ConfigParser(interpolation=None, strict=False)
+    seen = set()
+
+    def read(path):
+        path = os.path.abspath(os.path.expanduser(path))
+        if path in seen:
+            return
+        seen.add(path)
+        try:
+            with open(path) as file:
+                text = _FOOT_BLOCK.sub("", file.read())
+            local = configparser.ConfigParser(interpolation=None, strict=False)
+            local.read_string(text)
+            include = local.get("main", "include", fallback="")
+            if include:
+                include = os.path.expanduser(include)
+                read(include if os.path.isabs(include) else os.path.join(os.path.dirname(path), include))
+            config.read_string(text)
+        except (OSError, configparser.Error):
+            return
+
+    read(FOOT_INI)
+    section = "colors-dark" if config.has_section("colors-dark") else "colors"
+    try:
+        alpha = config.getfloat(section, "alpha", fallback=1.0)
+    except ValueError:
+        alpha = 1.0
+    foreground = config.get(section, "foreground", fallback=text_color(0))
+    background = config.get(section, "background", fallback=foot_bg())
+    foreground = foreground if re.fullmatch(r"[0-9a-fA-F]{6}", foreground) else text_color(0)
+    background = background if re.fullmatch(r"[0-9a-fA-F]{6}", background) else foot_bg()
+    return min(1.0, max(0.0, alpha)), foreground, background
+
+
+def push_foot_alpha(alpha, background=None):
+    seq = f"\033]11;[{int(round(alpha * 100))}]#{background or foot_bg()}\033\\"
     for t in foot_ttys():
         try:
             with open(t, "w") as f:
@@ -456,21 +497,30 @@ def push_foot_alpha(alpha):
 
 _last_alpha = [None]
 _last_text = [None]
+_last_bg = [None]
 
 
 _live = {"state": None}   # what's on screen right now, saved or not
+
+
+def sync_foot(s, force=False):
+    if s["glass_on"]:
+        alpha, foreground, background = s["foot_alpha"], text_color(s["text_boost"]), foot_bg()
+    else:
+        alpha, foreground, background = base_foot_colors()
+    if force or (_last_alpha[0], _last_bg[0]) != (alpha, background):
+        push_foot_alpha(alpha, background)
+        _last_alpha[0], _last_bg[0] = alpha, background
+    if force or _last_text[0] != foreground:
+        push_foot_text(0, foreground)
+        _last_text[0] = foreground
 
 
 def apply(s, preview_off=False):
     _live["state"] = s
     hypr_eval(glass_lua(s, preview_off) + (edge_lua(s, preview_off) if edge_supported() else "")
               + (light_lua(s, preview_off) if light_supported() else "") + look_lua(s))
-    if _last_alpha[0] != s["foot_alpha"]:
-        push_foot_alpha(s["foot_alpha"])
-        _last_alpha[0] = s["foot_alpha"]
-    if _last_text[0] != s["text_boost"]:
-        push_foot_text(s["text_boost"])
-        _last_text[0] = s["text_boost"]
+    sync_foot(s)
 
 
 def write_atomic(path, text):
@@ -615,8 +665,7 @@ def revert():
     _live["state"] = None   # don't let the reload watcher put the unsaved values back
     subprocess.run(["hyprctl", "reload"], capture_output=True)
     s = load_state()
-    push_foot_alpha(s["foot_alpha"])
-    _last_alpha[0] = s["foot_alpha"]
+    sync_foot(s, force=True)
     return s
 
 
@@ -838,8 +887,7 @@ def watch_reloads():
             if s is not None:
                 hypr_eval(glass_lua(s) + (edge_lua(s) if edge_supported() else "")
                           + (light_lua(s) if light_supported() else "") + look_lua(s))
-            push_foot_alpha((s or load_state())["foot_alpha"])
-            push_foot_text((s or load_state())["text_boost"])
+            sync_foot(s or load_state(), force=True)
 
 
 def theme_hook():
@@ -850,11 +898,10 @@ def theme_hook():
     if theme_state_file() or _glass_was_themed():
         save(s, persist=False)                    # writes liquid_glass.lua + updates the foot block, reloads
         _mark_themed(bool(theme_state_file()))
-        push_foot_alpha(s["foot_alpha"])
     else:
         with _Lock():
             _update_foot(s, create=False)
-    push_foot_text(s["text_boost"])
+    sync_foot(s, force=True)
 
 
 def legacy_foot():
