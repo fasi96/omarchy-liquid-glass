@@ -93,6 +93,7 @@ Hyprland plugins are compiled for one Hyprland version, so after an update the g
 
 - [HyprGlass](https://github.com/hyprnux/hyprglass) by hyprnux (BSD-3-Clause): the Liquid Glass shader and plugin this is built on.
 - [Ric Lewis](https://github.com/keylimesoda): turning the glass off restores your theme (#1).
+- [Sabo Sugi](https://codepen.io/sabosugi): Liquid touch is adapted from their CodePen ["Viscous Liquid - Cursor FX"](https://codepen.io/sabosugi/pen/01a125aa-40e8-70ca-b198-550dc149d263) (MIT), with the fluid solver from Pavel Dobryakov's [WebGL Fluid Simulation](https://github.com/PavelDoGreat/WebGL-Fluid-Simulation) (MIT). Their notices ship with the plugin.
 - Motion design follows Apple's [Meet Liquid Glass](https://developer.apple.com/videos/play/wwdc2025/219/) (WWDC25): light and movement come from what you do.
 
 This package (installer + Glass Tuner) is MIT-licensed. The plugin keeps HyprGlass's BSD-3-Clause license.
