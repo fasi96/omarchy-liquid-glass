@@ -142,6 +142,15 @@ EDGE = {
     "bevel_tint":           (0.0, 1.0, 0.0),     # 0 its own colour, 1 the colours behind the glass
     "self_sample":          (0.0, 1.0, 0.0),     # mixes the window's own content into the glass
 }
+# Liquid touch (HyprGlass Liquid fork, sent only when the loaded plugin has it):
+# moving the pointer stirs a thin clear liquid on the glass under it. The tuner
+# shows only these; the plugin's other liquid_* options keep their defaults.
+LIQUID = {
+    "liquid_amount":        (0.0, 2.0, 1.0),     # how strong the whole look is
+    "liquid_radius":        (15, 160, 60),       # brush size, px
+    "liquid_color":         (0.0, 3.0, 0.7),     # rainbow split on curved liquid
+    "liquid_fade":          (0.2, 4.0, 0.9),     # how fast it dries (higher = sooner)
+}
 # Text in foot (applies to terminals, not the glass plugin)
 FONT_WEIGHTS = ["regular", "medium", "semibold", "bold"]
 
@@ -162,13 +171,13 @@ LOOK = {
 }
 BOOLS = {"bold_bright": True, "glass_on": True, "shadow": True, "border_spin": False, "glass_border": True,
          "light_on": True, "glow_on": True, "materialize_on": True,
-         "parallax_on": True, "drift_on": False, "oil_on": True}
-INT_KEYS = {"specular_angle", "bevel_angle", "oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle"}
+         "parallax_on": True, "drift_on": False, "oil_on": True, "liquid_on": False}
+INT_KEYS = {"specular_angle", "bevel_angle", "oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle", "liquid_radius"}
 
 
 def defaults():
     """Built-in values, overlaid with the look shipped in ../defaults.json."""
-    d = {k: v[2] for k, v in {**GLASS, **LIGHT, **EDGE, **LOOK}.items()}
+    d = {k: v[2] for k, v in {**GLASS, **LIGHT, **EDGE, **LIQUID, **LOOK}.items()}
     d.update(_shipped())
     d.update(BOOLS)
     d["font_weight"] = "medium"
@@ -187,7 +196,7 @@ def _shipped():
 def clean(raw):
     """Clamp and type-check everything: these values end up inside Lua code."""
     s = defaults()
-    for k, (lo, hi, _) in {**GLASS, **LIGHT, **EDGE, **LOOK}.items():
+    for k, (lo, hi, _) in {**GLASS, **LIGHT, **EDGE, **LIQUID, **LOOK}.items():
         if k in raw:
             if isinstance(raw[k], bool):
                 continue
@@ -308,6 +317,32 @@ def edge_supported():
 
 
 _edge_ok = [None]
+
+
+def liquid_supported():
+    """True when the loaded hyprglass has liquid touch (the fork, 1.5.0 on)."""
+    if _liquid_ok[0] is None:
+        out = subprocess.run(["hyprctl", "getoption", "plugin:hyprglass:liquid_amount"],
+                             capture_output=True, text=True).stdout
+        _liquid_ok[0] = bool(out) and "no such option" not in out
+    return _liquid_ok[0]
+
+
+_liquid_ok = [None]
+
+
+def liquid_lua(s, preview_off=False):
+    vals = {k: s[k] for k in LIQUID}
+    if preview_off or not (s["glass_on"] and s["liquid_on"]):
+        vals["liquid_amount"] = 0.0
+    body = ", ".join(f"{k} = {float(v)}" for k, v in vals.items())
+    return f"hl.plugin.hyprglass.config({{ {body} }})\n"
+
+
+def motion_lua(s, preview_off=False):
+    """Everything only the fork has: light and friends, then liquid touch."""
+    return ((light_lua(s, preview_off) if light_supported() else "")
+            + (liquid_lua(s, preview_off) if liquid_supported() else ""))
 
 
 def edge_lua(s, preview_off=False):
@@ -519,7 +554,7 @@ def sync_foot(s, force=False):
 def apply(s, preview_off=False):
     _live["state"] = s
     hypr_eval(glass_lua(s, preview_off) + (edge_lua(s, preview_off) if edge_supported() else "")
-              + (light_lua(s, preview_off) if light_supported() else "") + look_lua(s))
+              + motion_lua(s, preview_off) + look_lua(s))
     sync_foot(s)
 
 
@@ -635,6 +670,7 @@ def _save(s, persist):
 
     glass_block = glass_lua(s).replace("\n", "\n  ").rstrip()
     light_block = light_lua(s).replace("\n", "\n  ").rstrip()
+    liquid_block = liquid_lua(s).replace("\n", "\n  ").rstrip()
     edge_block = edge_lua(s).replace("\n", "\n  ").rstrip()
     lua = (
         "-- Liquid Glass for Omarchy: glass on terminals + the window look.\n"
@@ -645,6 +681,7 @@ def _save(s, persist):
         f"  {glass_block}\n"
         + (f"  -- edge shaping (hyprglass v0.9.0)\n  {edge_block}\n" if edge_supported() else "")
         + (f"  -- Liquid Glass motion (HyprGlass Liquid fork)\n  {light_block}\n" if light_supported() else "")
+        + (f"  -- liquid touch: the pointer stirs the glass\n  {liquid_block}\n" if liquid_supported() else "")
         + "end\n\n"
         + look_lua(s)
         + ("\no.window({ tag = \"terminal\" }, { tag = \"+hyprglass_enabled\" })\n" if s["glass_on"] else "")
@@ -790,8 +827,8 @@ class H(BaseHTTPRequestHandler):
         elif self.path == "/looks":
             self.send(200, json.dumps(load_looks()))
         elif self.path == "/state":
-            meta = {"glass": {**GLASS, **LIGHT, **EDGE}, "look": LOOK, "defaults": defaults(),
-                    "light": light_supported(), "edge": edge_supported()}
+            meta = {"glass": {**GLASS, **LIGHT, **EDGE, **LIQUID}, "look": LOOK, "defaults": defaults(),
+                    "light": light_supported(), "edge": edge_supported(), "liquid": liquid_supported()}
             self.send(200, json.dumps({"state": load_state(), "meta": meta}))
         else:
             self.send(404, "{}")
@@ -894,7 +931,7 @@ def watch_reloads():
             if s is not None:
                 s = _live["state"] = follow_saved_switch(s)
                 hypr_eval(glass_lua(s) + (edge_lua(s) if edge_supported() else "")
-                          + (light_lua(s) if light_supported() else "") + look_lua(s))
+                          + motion_lua(s) + look_lua(s))
             sync_foot(s or load_state(), force=True)
 
 

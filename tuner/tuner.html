@@ -11,19 +11,22 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; background: var(--bg); color: var(--text);
     font: 13px/1.35 "JetBrainsMono Nerd Font", ui-monospace, monospace; }
-  body { padding: 14px 14px 160px; }
-  h1 { font-size: 15px; margin: 0 0 2px; letter-spacing: .02em; }
-  .sub { color: var(--muted); margin-bottom: 12px; }
+  body { padding: 14px 14px 130px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+  h1 { font-size: 15px; margin: 0; letter-spacing: .02em; }
+  .master { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+  .sub { color: var(--muted); margin: 2px 0 12px; font-size: 11px; }
   section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     padding: 10px 12px 4px; margin-bottom: 10px; }
   section .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent);
-    margin: 0; }
+  section h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--accent); margin: 0; }
+  section h2 small { text-transform: none; letter-spacing: 0; color: var(--muted); font-weight: 400; margin-left: 6px; }
   .row { margin-bottom: 9px; }
   .row .top { display: flex; justify-content: space-between; gap: 8px; }
   .row label { cursor: default; }
   .row .val { color: var(--accent2); font-variant-numeric: tabular-nums; }
-  .row .hint { color: var(--muted); font-size: 11px; }
+  .row .hint, .note { color: var(--muted); font-size: 11px; }
+  .note { margin: 6px 0 8px; }
   input[type=range] { width: 100%; accent-color: var(--accent); margin: 3px 0 0; }
   .toggle { display: flex; justify-content: space-between; align-items: center; margin-bottom: 9px; }
   .toggle input { width: 18px; height: 18px; accent-color: var(--accent); }
@@ -32,7 +35,7 @@
   input[type=color] { padding: 0; width: 44px; height: 26px; }
   .bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgba(13,14,18,.96);
     border-top: 1px solid var(--line); padding: 10px 14px; display: grid; gap: 8px;
-    grid-template-columns: 1fr 1fr; }
+    grid-template-columns: 1fr 1fr 1fr; }
   button { font: inherit; color: var(--text); background: #1d2028; border: 1px solid var(--line);
     border-radius: 8px; padding: 8px 6px; cursor: pointer; }
   button:hover { border-color: var(--accent); }
@@ -40,68 +43,171 @@
   button.compare { grid-column: 1 / -1; }
   button.compare:active, button.compare.held { background: var(--accent2); color: #000; }
   .status { grid-column: 1 / -1; color: var(--muted); font-size: 11px; min-height: 14px; }
+  .status.ok { color: var(--good); } .status.err { color: var(--warn); }
+
+  /* looks: one line, the managing folded away */
+  .looks-line { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin-bottom: 10px; }
+  .looks-line .lbl { color: var(--muted); }
+  .dirty { color: var(--accent2); font-size: 11px; }
   .looks-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 8px; }
   .looks-row.two { grid-template-columns: 1fr 1fr; }
   #look-name { background: #1d2028; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
     padding: 7px 8px; font: inherit; min-width: 0; }
-  #looks-box .hint { color: var(--muted); font-size: 11px; margin-bottom: 8px; }
-  .dirty { color: var(--accent2); font-size: 11px; }
-  .status.ok { color: var(--good); } .status.err { color: var(--warn); }
-  .group { margin: 18px 0 8px; }
-  .group-title { font-size: 12px; text-transform: uppercase; letter-spacing: .14em; color: var(--accent2); }
-  .group-sub { color: var(--muted); font-size: 11px; margin: 2px 0 8px; }
-  details.action { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; }
-  details.action > summary { list-style: none; display: flex; align-items: center; justify-content: space-between;
-    padding: 10px 12px; cursor: pointer; user-select: none; }
-  details.action > summary::-webkit-details-marker { display: none; }
-  details.action > summary .name::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--muted);
-    transition: transform .15s; }
-  details.action[open] > summary .name::before { transform: rotate(90deg); }
-  details.action .name { font-weight: 700; }
-  details.action.off .name { color: var(--muted); }
-  details.action .body { padding: 0 12px 4px; border-top: 1px solid var(--line); }
-  details.action.off .body { opacity: .5; }
-  details.action .tools { display: flex; justify-content: flex-end; margin: 8px 0 4px; }
+
+  /* folded panels: looks manager, fine-tune */
+  details.fold { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; }
+  details.fold > summary { list-style: none; padding: 10px 12px; cursor: pointer; user-select: none; }
+  details.fold > summary::-webkit-details-marker { display: none; }
+  details.fold > summary b::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s; }
+  details.fold[open] > summary b::before { transform: rotate(90deg); }
+  details.fold > summary span { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  details.fold > .inner { padding: 0 10px 2px; }
+  details.fold > .inner section { background: #121419; }
+  details.fold .tools-row { display: flex; gap: 8px; margin: 2px 0 10px; }
+  details.fold .tools-row button { flex: 1; }
+
+  /* effects: one line each (name, main slider, switch); the name opens the rest */
+  .fx { border-top: 1px solid var(--line); }
+  .fx:first-of-type { border-top: 0; }
+  .fx .line { display: grid; grid-template-columns: 12.5em 1fr 38px; gap: 10px; align-items: center; padding: 7px 0; }
+  .fx .nm { cursor: pointer; font-weight: 700; user-select: none; white-space: nowrap; }
+  .fx .nm::before { content: "▸"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s; }
+  .fx.open .nm::before { transform: rotate(90deg); }
+  .fx .line input[type=range] { margin: 0; }
+  .fx.off .nm { color: var(--muted); }
+  .fx.off .line input[type=range], .fx.off .more { opacity: .45; }
+  .fx .more { display: none; padding: 0 0 4px 1.1em; }
+  .fx.open .more { display: block; }
+  .fx .more .tools { display: flex; justify-content: space-between; align-items: center; margin: 0 0 6px; }
   button.revert { padding: 2px 8px; font-size: 11px; color: var(--muted); }
+  .new { color: var(--accent); font-size: 10px; font-weight: 400; margin-left: 4px; vertical-align: 1px; }
+
   .sw { width: 38px; height: 22px; border-radius: 11px; background: #2a2e38; position: relative; flex: none;
     transition: background .15s; cursor: pointer; }
   .sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%;
     background: #c9ccd6; transition: left .15s; }
   .sw.on { background: linear-gradient(90deg, #0e7490, #7c3aed); }
   .sw.on::after { left: 19px; background: #fff; }
+  body.glass-off #main { opacity: .5; }
 </style>
 </head>
 <body>
-<h1>Glass Tuner</h1>
+<header>
+  <h1>Glass Tuner</h1>
+  <div class="master"><span id="master-label">Glass</span><span class="sw" id="master" role="switch" title="Liquid Glass on terminals"></span></div>
+</header>
 <div class="sub">Changes show live. Double-click a slider to reset it. Nothing is saved until you press Save.</div>
-<section id="looks-box">
-  <div class="head"><h2>Saved looks</h2><span class="dirty" id="dirty"></span></div>
-  <div class="toggle"><select id="looks" style="flex:1"></select></div>
-  <div class="looks-row two">
-    <button id="look-update" title="Overwrite the selected look with the current sliders">Update</button>
-    <button id="look-delete" title="Delete the selected look">Delete</button>
+
+<div class="looks-line">
+  <span class="lbl">Look</span>
+  <select id="looks"></select>
+  <span class="dirty" id="dirty"></span>
+</div>
+
+<div id="main"></div>
+
+<details class="fold" id="looks-box">
+  <summary><b>Saved looks</b><span id="look-active"></span></summary>
+  <div class="inner">
+    <div class="looks-row two">
+      <button id="look-update" title="Overwrite the selected look with the current sliders">Update selected</button>
+      <button id="look-delete" title="Delete the selected look">Delete selected</button>
+    </div>
+    <div class="looks-row">
+      <input id="look-name" maxlength="40" placeholder="Name, e.g. Apple glass">
+      <button id="look-new">Save as new</button>
+    </div>
   </div>
-  <div class="looks-row">
-    <input id="look-name" maxlength="40" placeholder="Name, e.g. Apple glass">
-    <button id="look-new">Save as new</button>
+</details>
+
+<details class="fold" id="fine">
+  <summary><b>Fine-tune everything</b><span>rim, tone, colour, text, window, border</span></summary>
+  <div class="inner">
+    <div class="tools-row">
+      <button id="apple">Load Apple-ish starting point</button>
+      <button id="wall">Next wallpaper</button>
+    </div>
+    <div id="ui"></div>
   </div>
-  <div class="hint" id="look-active"></div>
-</section>
-<div id="ui"></div>
+</details>
 
 <div class="bar">
   <button class="compare" id="compare">Hold to compare: glass off</button>
-  <button class="compare" id="apple">Load Apple-ish starting point</button>
   <button id="test">Open test window</button>
-  <button id="wall">Next wallpaper</button>
   <button id="revert">Revert to saved</button>
   <button class="primary" id="save">Save</button>
   <div class="status" id="status"></div>
 </div>
-
 <script>
-// Main glass settings: always-open cards. Actions: collapsible, each with an
-// on/off switch in its header (`action` = its switch key).
+// The page, top to bottom: a few sliders that change how the glass feels, the
+// effects (each one line: switch + its main slider, the name opens the rest),
+// then every glass setting folded under "Fine-tune everything". A key can sit
+// in more than one place (Frost is the Blur slider); they stay in step.
+const FEEL = [
+  ['blur_strength', 'Frost', 'How milky the glass is. Less frost shows the bending better'],
+  ['refraction_strength', 'Bend', 'How hard the thick edges bend what is behind'],
+  ['chromatic_aberration', 'Rainbow', 'Colour split where the glass bends'],
+  ['foot_alpha', 'Darkness', 'Terminal background: 0 = pure glass, 1 = solid'],
+];
+
+// needs: 'light' = the HyprGlass Liquid fork, 'liquid' = a plugin with liquid touch
+const EFFECTS = [
+  { title: 'Liquid touch', action: 'liquid_on', needs: 'liquid', isNew: true, main: 'liquid_amount',
+    note: 'Moving the pointer stirs a thin clear liquid on the glass under it. It only runs while you stir.',
+    rows: [
+      ['liquid_radius', 'Brush size', 'px'],
+      ['liquid_color', 'Rainbow', 'Colour split where the liquid curves'],
+      ['liquid_fade', 'Dries', 'Higher = the liquid dries sooner'],
+    ]},
+  { title: 'Light follows you', action: 'light_on', needs: 'light', main: 'light_strength',
+    note: 'The rim lights up where it faces a light that leans toward your pointer.',
+    rows: [
+      ['light_cursor', 'Follows cursor', 'How far the light leans toward your pointer'],
+      ['light_lag', 'Cursor smoothing', 'Shared with Parallax: seconds to catch up with your pointer. 0 = instant'],
+      ['light_x', 'Light left / right', 'Across all monitors: 0 = left edge, 1 = right edge'],
+      ['light_y', 'Light height', '0 = top of the screens, below 0 = above them. Closer = highlights move more'],
+      ['light_sharpness', 'Highlight focus', 'Higher = a tighter, shinier highlight'],
+      ['light_width', 'Depth', 'How far into the glass the rim light reaches, px'],
+      ['light_far', 'Back reflection', 'Soft light on the side facing away'],
+      ['light_bend', 'Bend', 'How much the glass bends where it faces the light. 0 = light only'],
+      ['light_inactive', 'Unfocused windows', 'How much light unfocused windows catch'],
+    ], extra: ['light_color', 'Light colour'] },
+  { title: 'Oil film', action: 'oil_on', needs: 'light', main: 'oil_amount',
+    note: 'Slow iridescent swirls on the glass, like oil on water.',
+    rows: [
+      ['oil_speed', 'Flow speed', ''],
+      ['oil_scale', 'Swirl size', 'px'],
+      ['oil_color', 'Colour', '0 = clear sheen, 1 = full rainbow film'],
+      ['oil_warp', 'Ripple', 'How much the film ripples the view behind the glass'],
+      ['oil_inactive', 'Unfocused windows', '0 = only the focused window flows (lighter on the GPU)'],
+      ['oil_fps', 'Smoothness', 'Redraws per second while it flows. Lower = lighter on the GPU'],
+    ]},
+  { title: 'Parallax tilt', action: 'parallax_on', needs: 'light', main: 'parallax_strength',
+    note: 'The view behind the glass shifts as your pointer moves, like tilting thick glass.',
+    rows: [
+      ['parallax_depth', 'Thickness', 'Extra shift toward the rim, so the glass reads as thick'],
+      ['light_lag', 'Cursor smoothing', 'Shared with Light: seconds to catch up with your pointer. 0 = instant'],
+    ]},
+  { title: 'Click glow', action: 'glow_on', needs: 'light', main: 'glow_strength',
+    note: 'Clicking a window sends a ring of light through its glass.',
+    rows: [
+      ['glow_duration', 'Duration', 'Seconds to spread and fade'],
+      ['glow_spread', 'Spread', 'How far it travels (share of the window)'],
+      ['glow_ring', 'Ring width', 'px'],
+      ['glow_flex', 'Flex', 'How much the glass flexes as the ripple passes. 0 = light only'],
+    ]},
+  { title: 'Materialize', action: 'materialize_on', needs: 'light',
+    note: 'New windows appear by bending in, not fading.',
+    rows: [['materialize_duration', 'Duration', 'Seconds']] },
+  { title: 'Drift', action: 'drift_on', needs: 'light',
+    note: 'The light slowly wanders on its own, so highlights creep round the rims.',
+    rows: [
+      ['light_drift', 'Amount', ''],
+      ['light_drift_period', 'Time', 'Seconds for one slow wander'],
+    ]},
+];
+
+// Fine-tune: every glass and window setting, in always-open cards.
 const SECTIONS = [
   { title: 'Thick glass rim', rows: [
     ['edge_thickness', 'Rim width', 'How wide the thick glass edge is (share of the window size)'],
@@ -154,7 +260,7 @@ const SECTIONS = [
     ['rounding', 'Corner rounding', ''],
     ['gaps_in', 'Gap between windows', ''],
     ['gaps_out', 'Gap to screen edge', ''],
-  ], toggles: [['glass_on', 'Liquid Glass on terminals'], ['shadow', 'Shadows']] },
+  ], toggles: [['shadow', 'Shadows']] },
   { title: 'Outer line (flat border)', rows: [
     ['border_size', 'Line thickness', 'A thin lit lip outside the glass. 0 = none'],
     ['rim_lit', 'Lit corner', 'Brightness where the light hits'],
@@ -164,85 +270,50 @@ const SECTIONS = [
     ['rim_inactive', 'Unfocused windows', 'How much rim unfocused windows keep'],
   ], extra: ['rim_color', 'Rim colour'],
     toggles: [['glass_border', 'Lit white line (off = neon gradient)'], ['border_spin', 'Spin the light around']] },
-
-  { group: 'Actions', light: true, rows: [
-    ['light_lag', 'Cursor smoothing', 'Shared by Light and Parallax: seconds they take to catch up with your pointer. 0 = instant'],
-  ]},
-  { title: 'Light follows you', action: 'light_on', light: true, rows: [
-    ['light_strength', 'Light', 'Light added where the rim faces the light. 0 = no light, the glass still bends'],
-    ['light_cursor', 'Follows cursor', 'How far the light leans toward your pointer'],
-    ['light_x', 'Light left / right', 'Across all monitors: 0 = left edge, 1 = right edge'],
-    ['light_y', 'Light height', '0 = top of the screens, below 0 = above them. Closer = highlights move more'],
-    ['light_sharpness', 'Highlight focus', 'Higher = a tighter, shinier highlight'],
-    ['light_width', 'Depth', 'How far into the glass the rim light reaches, px'],
-    ['light_far', 'Back reflection', 'Soft light on the side facing away'],
-    ['light_bend', 'Bend', 'How much the glass bends where it faces the light. 0 = light only'],
-    ['light_inactive', 'Unfocused windows', 'How much light unfocused windows catch'],
-  ], extra: ['light_color', 'Light colour'] },
-  { title: 'Parallax tilt', action: 'parallax_on', light: true, rows: [
-    ['parallax_strength', 'Tilt', 'How far the view behind the glass shifts as your pointer moves, px'],
-    ['parallax_depth', 'Thickness', 'Extra shift toward the rim, so the glass reads as thick'],
-  ]},
-  { title: 'Oil film', action: 'oil_on', light: true, rows: [
-    ['oil_amount', 'Amount', 'Slow iridescent swirls on the glass, like oil on water'],
-    ['oil_speed', 'Flow speed', ''],
-    ['oil_scale', 'Swirl size', 'px'],
-    ['oil_color', 'Colour', '0 = clear sheen, 1 = full rainbow film'],
-    ['oil_warp', 'Ripple', 'How much the film ripples the view behind the glass'],
-    ['oil_inactive', 'Unfocused windows', '0 = only the focused window flows (lighter on the GPU)'],
-    ['oil_fps', 'Smoothness', 'Redraws per second while it flows. Lower = lighter on the GPU'],
-  ]},
-  { title: 'Click glow', action: 'glow_on', light: true, rows: [
-    ['glow_strength', 'Light', 'Light that spreads from where you click. 0 = no light, the glass still flexes'],
-    ['glow_duration', 'Duration', 'Seconds to spread and fade'],
-    ['glow_spread', 'Spread', 'How far it travels (share of the window)'],
-    ['glow_ring', 'Ring width', 'px'],
-    ['glow_flex', 'Flex', 'How much the glass flexes as the ripple passes. 0 = light only'],
-  ]},
-  { title: 'Materialize', action: 'materialize_on', light: true, rows: [
-    ['materialize_duration', 'Duration', 'New windows appear by bending in, not fading. Seconds'],
-  ]},
-  { title: 'Drift', action: 'drift_on', light: true, rows: [
-    ['light_drift', 'Amount', 'The light slowly wanders on its own, so highlights creep round the rims'],
-    ['light_drift_period', 'Time', 'Seconds for one slow wander'],
-  ]},
 ];
 
-// which action cards are open (per-viewer convenience; fine if storage is unavailable)
+// which effects and folds are open (per-viewer convenience; fine if storage is unavailable)
 const OPEN_KEY = 'glass-tuner-open';
 function openSet() { try { return new Set(JSON.parse(localStorage.getItem(OPEN_KEY) || '[]')); } catch (e) { return new Set(); } }
 function saveOpen(set) { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...set])); } catch (e) {} }
+function remember(key, open) { const s = openSet(); open ? s.add(key) : s.delete(key); saveOpen(s); }
 
 let S = {}, SAVED = {}, META = {}, timer = null, compare = false;
 const $ = id => document.getElementById(id);
 const range = k => (META.glass[k] || META.look[k]);
-const isInt = k => ['specular_angle', 'bevel_angle', 'oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle'].includes(k);
-
+const isInt = k => ['specular_angle', 'bevel_angle', 'oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle', 'liquid_radius'].includes(k);
 function status(msg, cls = '') { const el = $('status'); el.textContent = msg; el.className = 'status ' + cls; }
-
 function push() {
   markDirty();
   clearTimeout(timer);
   timer = setTimeout(() => fetch('/apply', { method: 'POST', body: JSON.stringify({ state: S, compare }) }), 40);
 }
-
 function fmt(k, v) { return isInt(k) ? String(Math.round(v)) : Number(v).toFixed(k === 'edge_thickness' ? 3 : 2); }
 
-function sliderRow(k, label, hint) {
+// every control showing a key, so the copies of it stay in step
+let BOUND = {};
+function bind(k, refresh) { (BOUND[k] ||= []).push(refresh); }
+function changed(k, except) { for (const f of BOUND[k] || []) if (f !== except) f(); }
+
+function slider(k) {
   const [lo, hi] = range(k);
+  const inp = document.createElement('input');
+  Object.assign(inp, { type: 'range', min: lo, max: hi, step: isInt(k) ? 1 : (hi - lo) / 200, value: S[k] });
+  return inp;
+}
+function sliderRow(k, label, hint) {
   const r = document.createElement('div'); r.className = 'row';
   r.innerHTML = `<div class="top"><label>${label}</label><span class="val"></span></div>`
     + (hint ? `<div class="hint">${hint}</div>` : '');
-  const inp = document.createElement('input');
-  Object.assign(inp, { type: 'range', min: lo, max: hi, step: isInt(k) ? 1 : (hi - lo) / 200, value: S[k] });
+  const inp = slider(k);
   const val = r.querySelector('.val');
-  const show = () => { val.textContent = fmt(k, S[k]); };
-  inp.oninput = () => { S[k] = parseFloat(inp.value); show(); push(); };
-  inp.ondblclick = () => { S[k] = META.defaults[k]; inp.value = S[k]; show(); push(); };
-  show(); r.appendChild(inp);
+  const refresh = () => { inp.value = S[k]; val.textContent = fmt(k, S[k]); };
+  bind(k, refresh);
+  inp.oninput = () => { S[k] = parseFloat(inp.value); val.textContent = fmt(k, S[k]); changed(k, refresh); push(); };
+  inp.ondblclick = () => { S[k] = META.defaults[k]; refresh(); changed(k, refresh); push(); };
+  refresh(); r.appendChild(inp);
   return r;
 }
-
 function fillSection(el, sec) {
   for (const [k, label, hint] of sec.rows) el.appendChild(sliderRow(k, label, hint));
   for (const [key, label, options, hint] of sec.choices || []) {
@@ -270,94 +341,130 @@ function fillSection(el, sec) {
     r.appendChild(c); el.appendChild(r);
   }
 }
-
-function revertButton(sec, label) {
+function revertButton(keys, label) {
   const btn = document.createElement('button');
   btn.className = 'revert'; btn.textContent = 'Revert';
-  btn.title = 'Put this section back to your saved values';
+  btn.title = 'Put this back to your saved values';
   btn.onclick = e => {
     e.preventDefault(); e.stopPropagation();
-    const keys = sec.rows.map(r => r[0]).concat((sec.toggles || []).map(t => t[0]), (sec.choices || []).map(c => c[0]),
-      sec.extra ? [sec.extra[0]] : [], sec.action ? [sec.action] : []);
     for (const k of keys) S[k] = SAVED[k];
     build(); push(); status(`${label} back to saved`, 'ok');
   };
   return btn;
 }
+const sectionKeys = sec => sec.rows.map(r => r[0]).concat((sec.toggles || []).map(t => t[0]), (sec.choices || []).map(c => c[0]),
+  sec.extra ? [sec.extra[0]] : [], sec.action ? [sec.action] : [], sec.main ? [sec.main] : []);
+
+function switchEl(on, title, flip) {
+  const sw = document.createElement('span');
+  sw.className = 'sw' + (on ? ' on' : ''); sw.setAttribute('role', 'switch');
+  sw.setAttribute('aria-checked', on ? 'true' : 'false'); sw.title = title;
+  sw.onclick = e => { e.preventDefault(); e.stopPropagation(); flip(sw); };
+  return sw;
+}
+
+function effectRow(fx, open) {
+  const el = document.createElement('div');
+  el.className = 'fx' + (open.has(fx.action) ? ' open' : '') + (S[fx.action] ? '' : ' off');
+  const line = document.createElement('div'); line.className = 'line';
+  const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = fx.title;
+  if (fx.isNew) nm.insertAdjacentHTML('beforeend', '<span class="new">new</span>');
+  nm.onclick = () => { el.classList.toggle('open'); remember(fx.action, el.classList.contains('open')); };
+  line.appendChild(nm);
+  if (fx.main) {
+    const inp = slider(fx.main);
+    const refresh = () => { inp.value = S[fx.main]; inp.title = fmt(fx.main, S[fx.main]); };
+    bind(fx.main, refresh); refresh();
+    inp.oninput = () => {
+      S[fx.main] = parseFloat(inp.value); inp.title = fmt(fx.main, S[fx.main]); changed(fx.main, refresh);
+      if (!S[fx.action]) flipEffect(fx, el, sw);      // moving the slider of an off effect turns it on
+      push();
+    };
+    inp.ondblclick = () => { S[fx.main] = META.defaults[fx.main]; refresh(); changed(fx.main, refresh); push(); };
+    line.appendChild(inp);
+  } else {
+    line.appendChild(document.createElement('span'));
+  }
+  const sw = switchEl(S[fx.action], 'Turn on or off', () => { flipEffect(fx, el, sw); push(); });
+  line.appendChild(sw);
+  el.appendChild(line);
+
+  const more = document.createElement('div'); more.className = 'more';
+  const tools = document.createElement('div'); tools.className = 'tools';
+  tools.innerHTML = `<span class="note">${fx.note || ''}</span>`;
+  tools.appendChild(revertButton(sectionKeys(fx), fx.title));
+  more.appendChild(tools);
+  if (fx.main) more.appendChild(sliderRow(fx.main, 'Strength', ''));
+  fillSection(more, fx);
+  el.appendChild(more);
+  return el;
+}
+function flipEffect(fx, el, sw) {
+  S[fx.action] = !S[fx.action];
+  sw.classList.toggle('on', S[fx.action]); sw.setAttribute('aria-checked', S[fx.action] ? 'true' : 'false');
+  el.classList.toggle('off', !S[fx.action]);
+  status(`${fx.title}: ${S[fx.action] ? 'on' : 'off'}`);
+}
 
 function build() {
-  const ui = $('ui'); ui.innerHTML = '';
+  BOUND = {};
   const open = openSet();
+
+  const sw = $('master');
+  sw.classList.toggle('on', !!S.glass_on); sw.setAttribute('aria-checked', S.glass_on ? 'true' : 'false');
+  document.body.classList.toggle('glass-off', !S.glass_on);
+
+  const main = $('main'); main.innerHTML = '';
+  const feel = document.createElement('section');
+  feel.innerHTML = '<div class="head"><h2>Feel</h2></div>';
+  for (const [k, label, hint] of FEEL) feel.appendChild(sliderRow(k, label, hint));
+  main.appendChild(feel);
+
+  const effects = EFFECTS.filter(fx => META[fx.needs]);
+  if (effects.length) {
+    const box = document.createElement('section');
+    box.innerHTML = '<div class="head"><h2>Effects<small>click a name for its settings</small></h2></div>';
+    for (const fx of effects) box.appendChild(effectRow(fx, open));
+    main.appendChild(box);
+  }
+
+  const ui = $('ui'); ui.innerHTML = '';
   for (const sec of SECTIONS) {
-    if (sec.light && !META.light) continue;   // patched build not loaded
     if (sec.edge && !META.edge) continue;     // plugin older than hyprglass v0.9.0
-
-    if (sec.group) {                           // a heading plus shared settings
-      const g = document.createElement('div'); g.className = 'group';
-      g.innerHTML = `<div class="group-title">${sec.group}</div><div class="group-sub">Each one turns on and off by itself. Click a name to open its settings.</div>`;
-      const box = document.createElement('section'); fillSection(box, sec);
-      g.appendChild(box); ui.appendChild(g);
-      continue;
-    }
-
-    if (sec.action) {                          // collapsible card with an on/off switch
-      const d = document.createElement('details'); d.className = 'action';
-      d.open = open.has(sec.action);
-      d.classList.toggle('off', !S[sec.action]);
-      const sum = document.createElement('summary');
-      const name = document.createElement('span'); name.className = 'name'; name.textContent = sec.title;
-      const sw = document.createElement('span');
-      sw.className = 'sw' + (S[sec.action] ? ' on' : ''); sw.setAttribute('role', 'switch');
-      sw.setAttribute('aria-checked', S[sec.action] ? 'true' : 'false'); sw.title = 'Turn on or off';
-      sw.onclick = e => {                       // flip the action, don't open/close the card
-        e.preventDefault(); e.stopPropagation();
-        S[sec.action] = !S[sec.action];
-        sw.classList.toggle('on', S[sec.action]); sw.setAttribute('aria-checked', S[sec.action] ? 'true' : 'false');
-        d.classList.toggle('off', !S[sec.action]);
-        push(); status(`${sec.title}: ${S[sec.action] ? 'on' : 'off'}`);
-      };
-      sum.append(name, sw);
-      d.appendChild(sum);
-      const body = document.createElement('div'); body.className = 'body';
-      const tools = document.createElement('div'); tools.className = 'tools';
-      tools.appendChild(revertButton(sec, sec.title));
-      body.appendChild(tools);
-      fillSection(body, sec);
-      d.appendChild(body);
-      d.ontoggle = () => { const s = openSet(); d.open ? s.add(sec.action) : s.delete(sec.action); saveOpen(s); };
-      ui.appendChild(d);
-      continue;
-    }
-
     const el = document.createElement('section');
     const head = document.createElement('div'); head.className = 'head';
     const h2 = document.createElement('h2'); h2.textContent = sec.title;
-    head.append(h2, revertButton(sec, sec.title));
+    head.append(h2, revertButton(sectionKeys(sec), sec.title));
     el.appendChild(head);
     fillSection(el, sec);
     ui.appendChild(el);
   }
 }
+$('master').onclick = () => {
+  S.glass_on = !S.glass_on; build(); push();
+  status(`Liquid Glass ${S.glass_on ? 'on' : 'off'}`);
+};
+for (const id of ['fine', 'looks-box']) {
+  $(id).open = openSet().has(id);
+  $(id).ontoggle = () => remember(id, $(id).open);
+}
 
 // ---------------- named looks ----------------
 let LOOKS = { looks: {}, active: null };
 const same = (a, b) => a && b && Object.keys(b).every(k => a[k] === b[k]);
-
 function markDirty() {
   const sel = $('looks').value;
-  $('dirty').textContent = sel && !same(S, LOOKS.looks[sel]) ? '• changed since loaded' : '';
+  $('dirty').textContent = sel && !same(S, LOOKS.looks[sel]) ? '• changed' : '';
 }
-
 function renderLooks(keep) {
   const sel = $('looks'); const want = keep ?? sel.value;
   sel.innerHTML = '';
   sel.add(new Option('— pick a look —', ''));
-  for (const name of Object.keys(LOOKS.looks).sort()) sel.add(new Option(name + (name === LOOKS.active ? '  (saved as active)' : ''), name));
+  for (const name of Object.keys(LOOKS.looks).sort()) sel.add(new Option(name + (name === LOOKS.active ? '  (active)' : ''), name));
   sel.value = want in LOOKS.looks ? want : '';
-  $('look-active').textContent = LOOKS.active ? `Active after reboot: ${LOOKS.active}` : 'Active after reboot: unnamed settings';
+  $('look-active').textContent = LOOKS.active ? `active after reboot: ${LOOKS.active}` : 'active after reboot: unnamed settings';
   markDirty();
 }
-
 $('looks').onchange = () => {
   const name = $('looks').value;
   if (!name) return markDirty();
@@ -387,14 +494,12 @@ $('look-delete').onclick = async () => {
   if (!confirm(`Delete the look "${name}"?`)) return;
   if (await lookPost('/looks/delete', { name })) { renderLooks(''); status(`Deleted "${name}"`, 'ok'); }
 };
-
 async function load() {
   const r = await (await fetch('/state')).json();
   S = r.state; SAVED = { ...r.state }; META = r.meta; build();
   LOOKS = await (await fetch('/looks')).json();
   renderLooks(LOOKS.active || '');
 }
-
 // the bar button turns the glass on and off while the tuner is open: follow it,
 // so a later slider move or Save doesn't switch it back
 setInterval(async () => {
@@ -404,12 +509,10 @@ setInterval(async () => {
     if (on !== SAVED.glass_on) { S.glass_on = SAVED.glass_on = on; build(); }
   } catch (e) {}
 }, 2000);
-
 const cmp = $('compare');
 const hold = on => { compare = on; cmp.classList.toggle('held', on); push(); };
 cmp.onmousedown = () => hold(true);
 addEventListener('mouseup', () => compare && hold(false));
-
 // Found by eye on a floating 1100x700 terminal: thick bending edge, low blur,
 // soft bright rim. Everything else stays where the sliders are.
 const APPLE = { blur_strength: 0.5, refraction_strength: 3, edge_thickness: 0.07, lens_distortion: 3,
@@ -431,7 +534,6 @@ $('save').onclick = async () => {
   LOOKS = await (await fetch('/looks')).json(); renderLooks(sel);
   r.errors ? status('Saved, but Hyprland reported: ' + r.errors, 'err') : status('Saved to liquid_glass.lua and foot.ini', 'ok');
 };
-
 load();
 </script>
 </body>

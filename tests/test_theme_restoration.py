@@ -72,6 +72,7 @@ class TunerTests(unittest.TestCase):
                 stack.enter_context(patch.object(tuner, 'theme_state_file', return_value=None))
                 stack.enter_context(patch.object(tuner, 'edge_supported', return_value=False))
                 stack.enter_context(patch.object(tuner, 'light_supported', return_value=False))
+                stack.enter_context(patch.object(tuner, 'liquid_supported', return_value=False))
                 run = stack.enter_context(patch.object(tuner.subprocess, 'run', return_value=SimpleNamespace(stdout='')))
                 stack.enter_context(patch.object(tuner, 'hypr_eval'))
                 alpha = stack.enter_context(patch.object(tuner, 'push_foot_alpha'))
