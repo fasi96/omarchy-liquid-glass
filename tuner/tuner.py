@@ -148,7 +148,7 @@ EDGE = {
 # Defaults = Flowing = the plugin's own defaults.
 LIQUID = {
     "liquid_amount":        (0.0, 2.0, 1.0),     # how strong the whole look is
-    "liquid_radius":        (15, 160, 60),       # brush size, px
+    "liquid_radius":        (10, 120, 33),       # brush size, px
     "liquid_color":         (0.0, 3.0, 0.7),     # rainbow split on curved liquid
     "liquid_fade":          (0.2, 4.0, 0.9),     # how fast it dries (higher = sooner)
     "liquid_force":         (0.0, 4.0, 1.25),    # how hard the pointer pushes

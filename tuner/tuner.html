@@ -154,18 +154,18 @@ const FEEL = [
   ['foot_alpha', 'Darkness', 'Terminal background: 0 = pure glass, 1 = solid'],
 ];
 
-// Liquid touch styles: each sets the whole feel at once (the Strength slider
-// stays yours). Flowing = the plugin's defaults. Tuned side by side on one stroke.
+// Liquid touch styles: each sets the whole feel at once (Strength and Brush size
+// stay yours). Flowing = the plugin's defaults. Tuned side by side on one stroke.
 const LIQUID_STYLES = [
   { name: 'Calm', hint: 'A soft, slow warp. Little swirl, few glints, dries quickly',
     set: { liquid_force: 0.9, liquid_swirl: 3, liquid_ripple: 0.5, liquid_drag: 0.6, liquid_return: 1.6,
-           liquid_refraction: 2.0, liquid_glints: 1.0, liquid_steps: 20, liquid_radius: 70, liquid_color: 0.4, liquid_fade: 1.4 } },
+           liquid_refraction: 2.0, liquid_glints: 1.0, liquid_steps: 20, liquid_color: 0.4, liquid_fade: 1.4 } },
   { name: 'Flowing', hint: 'Glossy liquid that swirls and catches the light',
     set: { liquid_force: 1.25, liquid_swirl: 8, liquid_ripple: 1.0, liquid_drag: 1.0, liquid_return: 1.1,
-           liquid_refraction: 2.6, liquid_glints: 1.5, liquid_steps: 20, liquid_radius: 60, liquid_color: 0.7, liquid_fade: 0.9 } },
+           liquid_refraction: 2.6, liquid_glints: 1.5, liquid_steps: 20, liquid_color: 0.7, liquid_fade: 0.9 } },
   { name: 'Wild', hint: 'Thick, shiny and swirly, with strong rainbow edges. Lingers longer',
     set: { liquid_force: 1.8, liquid_swirl: 16, liquid_ripple: 1.3, liquid_drag: 1.3, liquid_return: 0.8,
-           liquid_refraction: 3.2, liquid_glints: 2.2, liquid_steps: 30, liquid_radius: 55, liquid_color: 1.3, liquid_fade: 0.6 } },
+           liquid_refraction: 3.2, liquid_glints: 2.2, liquid_steps: 30, liquid_color: 1.3, liquid_fade: 0.6 } },
 ];
 
 // needs: 'light' = the HyprGlass Liquid fork, 'liquid' = a plugin with liquid touch
