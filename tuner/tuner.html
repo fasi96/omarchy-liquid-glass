@@ -154,7 +154,7 @@ const FEEL = [
   ['foot_alpha', 'Darkness', 'Terminal background: 0 = pure glass, 1 = solid'],
 ];
 
-// Liquid touch styles: each sets the whole feel at once (Strength and Brush size
+// Liquid Touch styles: each sets the whole feel at once (Strength and Brush size
 // stay yours). Flowing = the plugin's defaults. Tuned side by side on one stroke.
 const LIQUID_STYLES = [
   { name: 'Calm', hint: 'A soft, slow warp. Little swirl, few glints, dries quickly',
@@ -170,7 +170,7 @@ const LIQUID_STYLES = [
 
 // needs: 'light' = the HyprGlass Liquid fork, 'liquid' = a plugin with liquid touch
 const EFFECTS = [
-  { title: 'Liquid touch', action: 'liquid_on', needs: 'liquid', isNew: true, main: 'liquid_amount', styles: LIQUID_STYLES,
+  { title: 'Liquid Touch', action: 'liquid_on', needs: 'liquid', isNew: true, main: 'liquid_amount', styles: LIQUID_STYLES,
     note: 'Moving the pointer stirs a thin clear liquid on the glass under it. It only runs while you stir. After “Viscous Liquid” by Sabo Sugi.',
     rows: [
       ['liquid_radius', 'Brush size', 'px'],
@@ -393,7 +393,7 @@ function styleRow(fx, el, sw) {
       Object.assign(S, st.set);
       for (const k of Object.keys(st.set)) changed(k, refresh);
       if (!S[fx.action]) flipEffect(fx, el, sw);
-      refresh(); push(); status(`Liquid touch: ${st.name}`);
+      refresh(); push(); status(`Liquid Touch: ${st.name}`);
     };
     seg.appendChild(b);
   }

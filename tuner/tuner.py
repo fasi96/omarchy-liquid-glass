@@ -142,7 +142,7 @@ EDGE = {
     "bevel_tint":           (0.0, 1.0, 0.0),     # 0 its own colour, 1 the colours behind the glass
     "self_sample":          (0.0, 1.0, 0.0),     # mixes the window's own content into the glass
 }
-# Liquid touch (HyprGlass Liquid fork, sent only when the loaded plugin has it):
+# Liquid Touch (HyprGlass Liquid fork, sent only when the loaded plugin has it):
 # moving the pointer stirs a thin clear liquid on the glass under it. The first
 # four have sliders; the rest are set by the Calm / Flowing / Wild style buttons.
 # Defaults = Flowing = the plugin's own defaults.
