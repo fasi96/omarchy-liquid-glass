@@ -12,6 +12,7 @@ Apple-style Liquid Glass for your terminal on [Omarchy](https://omarchy.org): th
 - **Light that follows you**: a light source over your desktop lights each window's rim where it faces it. Move a window or your pointer and the highlight slides round the rim.
 - **Parallax tilt**: the view behind the glass shifts as your cursor moves, like tilting thick glass.
 - **Oil film**: slow iridescent swirls on the glass, like oil on water.
+- **Liquid Touch** (new in 1.5, off by default): moving your pointer over a window stirs a thin clear liquid on its glass. It bends and drags what's behind, catches the light, then dries. Calm, Flowing or Wild. It only runs while you stir.
 - **Click glow** and **materialize**: clicks energize the glass; new windows bend into existence.
 - **Glass Tuner**: a small app with live sliders for all of it, named looks you can save and switch, and terminal text settings that follow your Omarchy theme.
 
@@ -48,6 +49,8 @@ Setup lists everything it will do and asks first; without a terminal to ask in i
 
 ## Glass Tuner
 
+The Tuner opens on what matters most: four **Feel** sliders (Frost, Bend, Rainbow, Darkness), then **Effects**, one line each with its switch and main slider (click a name for the rest). Everything else is folded under **Fine-tune everything**:
+
 | Section | What it's for |
 |---|---|
 | Thick glass rim | How wide and how strongly the glass edge bends, rainbow fringe, edge glow, top highlight |
@@ -55,7 +58,7 @@ Setup lists everything it will do and asks first; without a terminal to ask in i
 | Text | Brightens your theme's own text colour (still follows theme changes), font weight, bold-in-bright |
 | Window look | Terminal transparency, padding, corner rounding, gaps, shadows |
 | Outer line | A thin lit lip around windows (or the neon gradient) |
-| Actions | Light follows you, Parallax tilt, Oil film, Click glow, Materialize, Drift. Each has its own on/off switch |
+| Effects | Liquid Touch (Calm / Flowing / Wild), Light follows you, Oil film, Parallax tilt, Click glow, Materialize, Drift. Each has its own on/off switch |
 
 Changes show live; nothing sticks until you press **Save**. Use **Hold to compare** to see the glass off, **Open test window** to try it on a floating terminal, and **Saved looks** to keep several setups. The shipped look is saved as "Liquid Glass".
 
