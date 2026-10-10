@@ -143,13 +143,22 @@ EDGE = {
     "self_sample":          (0.0, 1.0, 0.0),     # mixes the window's own content into the glass
 }
 # Liquid touch (HyprGlass Liquid fork, sent only when the loaded plugin has it):
-# moving the pointer stirs a thin clear liquid on the glass under it. The tuner
-# shows only these; the plugin's other liquid_* options keep their defaults.
+# moving the pointer stirs a thin clear liquid on the glass under it. The first
+# four have sliders; the rest are set by the Calm / Flowing / Wild style buttons.
+# Defaults = Flowing = the plugin's own defaults.
 LIQUID = {
     "liquid_amount":        (0.0, 2.0, 1.0),     # how strong the whole look is
     "liquid_radius":        (15, 160, 60),       # brush size, px
     "liquid_color":         (0.0, 3.0, 0.7),     # rainbow split on curved liquid
     "liquid_fade":          (0.2, 4.0, 0.9),     # how fast it dries (higher = sooner)
+    "liquid_force":         (0.0, 4.0, 1.25),    # how hard the pointer pushes
+    "liquid_swirl":         (0.0, 40.0, 8.0),    # how much the flow curls
+    "liquid_ripple":        (0.0, 4.0, 1.0),     # ripples raised by fast flow
+    "liquid_drag":          (0.0, 2.0, 1.0),     # how far the flow carries the view behind
+    "liquid_return":        (0.1, 4.0, 1.1),     # how fast that view flows back
+    "liquid_refraction":    (0.0, 5.0, 2.6),     # lens strength where the liquid is thick
+    "liquid_glints":        (0.0, 4.0, 1.5),     # sharp highlights
+    "liquid_steps":         (4, 40, 20),         # solver steps per frame: more = smoother, costs GPU
 }
 # Text in foot (applies to terminals, not the glass plugin)
 FONT_WEIGHTS = ["regular", "medium", "semibold", "bold"]
@@ -172,7 +181,7 @@ LOOK = {
 BOOLS = {"bold_bright": True, "glass_on": True, "shadow": True, "border_spin": False, "glass_border": True,
          "light_on": True, "glow_on": True, "materialize_on": True,
          "parallax_on": True, "drift_on": False, "oil_on": True, "liquid_on": False}
-INT_KEYS = {"specular_angle", "bevel_angle", "oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle", "liquid_radius"}
+INT_KEYS = {"specular_angle", "bevel_angle", "oil_scale", "oil_fps", "light_width", "glow_ring", "foot_pad", "blur_iterations", "tint_strength", "rounding", "gaps_in", "gaps_out", "border_size", "rim_angle", "liquid_radius", "liquid_steps"}
 
 
 def defaults():

@@ -81,6 +81,10 @@
   .fx .more .tools { display: flex; justify-content: space-between; align-items: center; margin: 0 0 6px; }
   button.revert { padding: 2px 8px; font-size: 11px; color: var(--muted); }
   .new { color: var(--accent); font-size: 10px; font-weight: 400; margin-left: 4px; vertical-align: 1px; }
+  .seg { display: flex; gap: 6px; margin: 2px 0 4px; }
+  .seg button { flex: 1; padding: 6px 4px; }
+  .seg button.on { border-color: var(--accent); color: var(--accent); background: #16262e; }
+  .seg-hint { color: var(--muted); font-size: 11px; margin-bottom: 10px; min-height: 14px; }
 
   .sw { width: 38px; height: 22px; border-radius: 11px; background: #2a2e38; position: relative; flex: none;
     transition: background .15s; cursor: pointer; }
@@ -150,9 +154,23 @@ const FEEL = [
   ['foot_alpha', 'Darkness', 'Terminal background: 0 = pure glass, 1 = solid'],
 ];
 
+// Liquid touch styles: each sets the whole feel at once (the Strength slider
+// stays yours). Flowing = the plugin's defaults. Tuned side by side on one stroke.
+const LIQUID_STYLES = [
+  { name: 'Calm', hint: 'A soft, slow warp. Little swirl, few glints, dries quickly',
+    set: { liquid_force: 0.9, liquid_swirl: 3, liquid_ripple: 0.5, liquid_drag: 0.6, liquid_return: 1.6,
+           liquid_refraction: 2.0, liquid_glints: 1.0, liquid_steps: 20, liquid_radius: 70, liquid_color: 0.4, liquid_fade: 1.4 } },
+  { name: 'Flowing', hint: 'Glossy liquid that swirls and catches the light',
+    set: { liquid_force: 1.25, liquid_swirl: 8, liquid_ripple: 1.0, liquid_drag: 1.0, liquid_return: 1.1,
+           liquid_refraction: 2.6, liquid_glints: 1.5, liquid_steps: 20, liquid_radius: 60, liquid_color: 0.7, liquid_fade: 0.9 } },
+  { name: 'Wild', hint: 'Thick, shiny and swirly, with strong rainbow edges. Lingers longer',
+    set: { liquid_force: 1.8, liquid_swirl: 16, liquid_ripple: 1.3, liquid_drag: 1.3, liquid_return: 0.8,
+           liquid_refraction: 3.2, liquid_glints: 2.2, liquid_steps: 30, liquid_radius: 55, liquid_color: 1.3, liquid_fade: 0.6 } },
+];
+
 // needs: 'light' = the HyprGlass Liquid fork, 'liquid' = a plugin with liquid touch
 const EFFECTS = [
-  { title: 'Liquid touch', action: 'liquid_on', needs: 'liquid', isNew: true, main: 'liquid_amount',
+  { title: 'Liquid touch', action: 'liquid_on', needs: 'liquid', isNew: true, main: 'liquid_amount', styles: LIQUID_STYLES,
     note: 'Moving the pointer stirs a thin clear liquid on the glass under it. It only runs while you stir.',
     rows: [
       ['liquid_radius', 'Brush size', 'px'],
@@ -281,7 +299,7 @@ function remember(key, open) { const s = openSet(); open ? s.add(key) : s.delete
 let S = {}, SAVED = {}, META = {}, timer = null, compare = false;
 const $ = id => document.getElementById(id);
 const range = k => (META.glass[k] || META.look[k]);
-const isInt = k => ['specular_angle', 'bevel_angle', 'oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle', 'liquid_radius'].includes(k);
+const isInt = k => ['specular_angle', 'bevel_angle', 'oil_scale', 'oil_fps', 'light_width', 'glow_ring', 'foot_pad', 'blur_iterations', 'tint_strength', 'rounding', 'gaps_in', 'gaps_out', 'border_size', 'rim_angle', 'liquid_radius', 'liquid_steps'].includes(k);
 function status(msg, cls = '') { const el = $('status'); el.textContent = msg; el.className = 'status ' + cls; }
 function push() {
   markDirty();
@@ -353,7 +371,37 @@ function revertButton(keys, label) {
   return btn;
 }
 const sectionKeys = sec => sec.rows.map(r => r[0]).concat((sec.toggles || []).map(t => t[0]), (sec.choices || []).map(c => c[0]),
-  sec.extra ? [sec.extra[0]] : [], sec.action ? [sec.action] : [], sec.main ? [sec.main] : []);
+  sec.extra ? [sec.extra[0]] : [], sec.action ? [sec.action] : [], sec.main ? [sec.main] : [],
+  sec.styles ? Object.keys(sec.styles[0].set) : []);
+
+// Style buttons: one sets every key in its `set`; the matching one stays lit
+// until a slider moves away from it.
+function styleRow(fx, el, sw) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = '<div class="top" style="margin-bottom:4px"><label>Style</label></div>';
+  const seg = document.createElement('div'); seg.className = 'seg';
+  const hint = document.createElement('div'); hint.className = 'seg-hint';
+  const close = (a, b) => Math.abs(a - b) < 1e-3;
+  const refresh = () => {
+    const cur = fx.styles.find(st => Object.entries(st.set).every(([k, v]) => close(S[k], v)));
+    for (const b of seg.children) b.classList.toggle('on', !!cur && b.textContent === cur.name);
+    hint.textContent = cur ? cur.hint : 'Your own mix';
+  };
+  for (const st of fx.styles) {
+    const b = document.createElement('button'); b.textContent = st.name;
+    b.onclick = () => {
+      Object.assign(S, st.set);
+      for (const k of Object.keys(st.set)) changed(k, refresh);
+      if (!S[fx.action]) flipEffect(fx, el, sw);
+      refresh(); push(); status(`Liquid touch: ${st.name}`);
+    };
+    seg.appendChild(b);
+  }
+  for (const k of Object.keys(fx.styles[0].set)) bind(k, refresh);
+  refresh();
+  wrap.append(seg, hint);
+  return wrap;
+}
 
 function switchEl(on, title, flip) {
   const sw = document.createElement('span');
@@ -394,6 +442,7 @@ function effectRow(fx, open) {
   tools.innerHTML = `<span class="note">${fx.note || ''}</span>`;
   tools.appendChild(revertButton(sectionKeys(fx), fx.title));
   more.appendChild(tools);
+  if (fx.styles) more.appendChild(styleRow(fx, el, sw));
   if (fx.main) more.appendChild(sliderRow(fx.main, 'Strength', ''));
   fillSection(more, fx);
   el.appendChild(more);
