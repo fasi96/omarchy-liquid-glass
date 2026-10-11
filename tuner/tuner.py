@@ -795,9 +795,67 @@ def _drop_launcher():
         shutil.rmtree(d, ignore_errors=True)
 
 
+# Before the token is checked anyone on this machine can connect, so connections are
+# bounded first: at most MAX_CONNS at a time (more are closed before a thread is
+# made), each socket read/write gives up after IO_TIMEOUT, and the whole request has
+# to arrive within READ_DEADLINE (so trickling a byte at a time can't hold a slot).
+MAX_CONNS = 16
+IO_TIMEOUT = 5
+READ_DEADLINE = 10
+MAX_BODY = 1 << 20
+
+
+class Server(ThreadingHTTPServer):
+    request_queue_size = MAX_CONNS
+
+    def __init__(self, *a, **kw):
+        self._slots = threading.BoundedSemaphore(MAX_CONNS)
+        super().__init__(*a, **kw)
+
+    def process_request(self, request, client_address):
+        if not self._slots.acquire(blocking=False):
+            return self.shutdown_request(request)       # full: drop it, no thread
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+    def handle_error(self, request, client_address):
+        if not isinstance(sys.exc_info()[1], OSError):  # dropped or cut connections are not news
+            super().handle_error(request, client_address)
+
+
 class H(BaseHTTPRequestHandler):
+    timeout = IO_TIMEOUT
+
     def log_message(self, *a):
         pass
+
+    def setup(self):
+        super().setup()
+        self._deadline = threading.Timer(READ_DEADLINE, self._cut)
+        self._deadline.daemon = True
+        self._deadline.start()
+
+    def _cut(self):
+        try:
+            self.connection.shutdown(socket.SHUT_RDWR)   # wakes the blocked read with EOF
+        except OSError:
+            pass
+
+    def _read_done(self):
+        self._deadline.cancel()
+
+    def finish(self):
+        self._deadline.cancel()
+        super().finish()
 
     def _trusted(self):
         """Only the tuner page we opened: right Host (no DNS rebinding), and the
@@ -820,6 +878,7 @@ class H(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):
+        self._read_done()
         if self.path == "/":
             # the page itself holds no secrets; everything it does needs the token
             if self.headers.get("Host") != f"127.0.0.1:{PORT}":
@@ -845,9 +904,18 @@ class H(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._trusted():
             return self.send(403, "{}")
-        n = int(self.headers.get("Content-Length") or 0)
         try:
-            body = json.loads(self.rfile.read(n) or b"{}")
+            n = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return self.send(400, "{}")
+        if not 0 <= n <= MAX_BODY:
+            return self.send(413, "{}")
+        raw = self.rfile.read(n)
+        self._read_done()
+        if len(raw) != n:
+            return self.send(400, "{}")
+        try:
+            body = json.loads(raw or b"{}")
         except ValueError:
             return self.send(400, "{}")
         s = clean(body.get("state") or {})
@@ -1022,7 +1090,7 @@ def main():
         if c.get("title") == TITLE:
             dsp(f'hl.dsp.focus({{ window = "address:{c["address"]}" }})')
             return
-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), H)
+    srv = Server(("127.0.0.1", PORT), H)
     apply(load_state())   # screen matches the sliders from the start
     threading.Thread(target=open_window, daemon=True).start()
     threading.Thread(target=watch_reloads, daemon=True).start()
