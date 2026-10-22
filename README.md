@@ -20,7 +20,7 @@ It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux, 
 
 ## Requirements
 
-- Dependencies: `hyprpm` (ships with Hyprland), `base-devel cmake meson cpio pkgconf git` (installed for you), `python3`, `jq`, `chromium` for the tuner window, `foot`.
+- Dependencies: `hyprpm` (its own Arch package since Hyprland 0.56.2-4) and `base-devel cmake meson cpio pkgconf git`, all installed for you if missing, `python3`, `jq`, `chromium` for the tuner window, `foot`.
 - Omarchy with **Hyprland 0.56.2**. That's the tested version; others may not build yet.
 - **foot** as your terminal (Omarchy's default). The glass shows through see-through windows, and Glass Tuner's terminal settings are for foot.
 - A few minutes for `hyprpm` to build the plugin the first time. It asks for your password to install build tools and Hyprland headers.
@@ -45,7 +45,7 @@ cd omarchy-liquid-glass
 
 Either way, open a **new terminal** afterwards, and press **Super+Ctrl+G** for Glass Tuner (or search "Glass Tuner" in the launcher).
 
-Setup lists everything it will do and asks first; without a terminal to ask in it changes nothing unless you pass `--yes`. It builds the plugin with `hyprpm`, so it may install missing build tools (`base-devel cmake meson cpio pkgconf git`, shown in the list) and fetch Hyprland headers, which asks for your password and takes a few minutes the first time. Everything it adds to your config is fenced with `omarchy-liquid-glass` markers. Before it starts, it copies hyprland.lua, bindings.lua, autostart.lua and foot.ini, plus anything already sitting at a path it installs to, into `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already have upstream HyprGlass in hyprpm, setup asks before replacing it (both provide the same plugin), and puts it back if the new build fails.
+Setup lists everything it will do and asks first; without a terminal to ask in it changes nothing unless you pass `--yes`. It builds the plugin with `hyprpm`, so it may install missing build tools (`hyprpm base-devel cmake meson cpio pkgconf git`, shown in the list) and fetch Hyprland headers, which asks for your password and takes a few minutes the first time. Everything it adds to your config is fenced with `omarchy-liquid-glass` markers. Before it starts, it copies hyprland.lua, bindings.lua, autostart.lua and foot.ini, plus anything already sitting at a path it installs to, into `~/.config/omarchy-liquid-glass/backup-<time>/`. If you already have upstream HyprGlass in hyprpm, setup asks before replacing it (both provide the same plugin), and puts it back if the new build fails.
 
 ## Glass Tuner
 

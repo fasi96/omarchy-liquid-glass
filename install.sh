@@ -93,7 +93,7 @@ for arg in "$@"; do
     esac
 done
 
-for c in hyprctl hyprpm python3 jq git sha256sum; do
+for c in hyprctl python3 jq git sha256sum; do
     command -v "$c" >/dev/null || die "missing: $c"
 done
 [ -n "${LG_PLUGIN_ONLY:-}" ] || for c in chromium foot; do command -v "$c" >/dev/null || die "missing: $c"; done
@@ -111,6 +111,9 @@ fi
 MISSING_PKGS=()
 if [ -z "${LG_SKIP_PLUGIN:-}" ]; then
     mapfile -t MISSING_PKGS < <(pacman -T "${BUILD_PKGS[@]}" 2>/dev/null || true)
+    # Arch ships hyprpm as its own package since hyprland 0.56.2-4, and upgrading
+    # hyprland removes the copy that used to come with it
+    command -v hyprpm >/dev/null || MISSING_PKGS+=(hyprpm)
 fi
 
 # ---------------------------------------------------------------- consent
@@ -224,16 +227,21 @@ restore_removed() {
     done
 }
 
+install_pkgs() {
+    [ ${#MISSING_PKGS[@]} -gt 0 ] || return 0
+    say "installing build tools: ${MISSING_PKGS[*]} (sudo)"
+    if [ -t 0 ]; then sudo pacman -S --needed "${MISSING_PKGS[@]}"
+    else sudo pacman -S --needed --noconfirm "${MISSING_PKGS[@]}"; fi   # --yes: you agreed to the list above
+    MISSING_PKGS=()
+}
+
 plugin_step() {
-    # decide about other hyprglass installs before touching anything
+    # hyprpm itself comes first when it's missing: the decisions below ask it what's installed
+    command -v hyprpm >/dev/null || install_pkgs
+    # decide about other hyprglass installs before touching anything else
     decide_glass_repos
     decide_headers
-
-    if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
-        say "installing build tools: ${MISSING_PKGS[*]} (sudo)"
-        if [ -t 0 ]; then sudo pacman -S --needed "${MISSING_PKGS[@]}"
-        else sudo pacman -S --needed --noconfirm "${MISSING_PKGS[@]}"; fi   # --yes: you agreed to the list above
-    fi
+    install_pkgs
 
     say "fetching HyprGlass Liquid at the pinned commit ${HYPRGLASS_REV:0:12}"
     if [ -e "$PLUGIN_SRC" ]; then
