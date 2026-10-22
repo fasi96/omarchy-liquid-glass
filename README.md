@@ -49,7 +49,7 @@ Setup lists everything it will do and asks first; without a terminal to ask in i
 
 ## Glass Tuner
 
-The Tuner is one wide window along the bottom of the screen, with a test terminal above it so you see the glass while you tune (closing the Tuner closes it too). On the left are four **Feel** sliders (Frost, Bend, Rainbow, Darkness) and your saved **Looks**. On the right are the **Effects**, each with its on/off switch; click one for its settings. **All settings** at the end of that list holds everything else:
+The Tuner is one wide window along the bottom of the screen, with a test terminal above it so you see the glass while you tune (closing the Tuner closes it too). On the left are four **Presets** (Clear, Frosted, Subtle, Vivid) that set the whole look in one click, four **Feel** sliders (Frost, Bend, Rainbow, Darkness), and your saved **Looks**. On the right are the **Effects**, each with its on/off switch; click one for its settings. **All settings** at the end of that list holds everything else:
 
 | Section | What it's for |
 |---|---|

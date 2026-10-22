@@ -736,7 +736,7 @@ def wait_title(title, secs=6, key="title"):
 
 # The Tuner is wide and short and sits along the bottom of the screen; the test
 # window opens in the space above it, so you see the glass while you tune.
-TUNER_W, TUNER_H, GAP = 980, 560, 16
+TUNER_W, TUNER_H, GAP = 980, 620, 16
 TEST_CLASS = "org.omarchy.glass-test"
 
 

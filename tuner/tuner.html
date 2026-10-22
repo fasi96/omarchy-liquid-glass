@@ -23,10 +23,10 @@
   .col { min-height: 0; overflow: auto; padding: 12px 18px; scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
   .left { border-right: 1px solid var(--line); }
   h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
-    margin: 0 0 10px; display: flex; align-items: center; gap: 8px; min-height: 24px; }
+    margin: 0 0 8px; display: flex; align-items: center; gap: 8px; min-height: 24px; }
   h2 .grow { flex: 1; }
 
-  .row { margin-bottom: 11px; }
+  .row { margin-bottom: 10px; }
   .row .top { display: flex; justify-content: space-between; gap: 8px; }
   .val { color: var(--muted); font-variant-numeric: tabular-nums; }
   .hint { color: var(--muted); font-size: 11.5px; }
@@ -76,6 +76,7 @@
   .note { color: var(--muted); margin: 0 0 14px; max-width: 60ch; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 26px; }
   .seg { display: flex; gap: 6px; margin: 4px 0 4px; }
+  #presets { margin: 0 0 12px; }
   .seg button { flex: 1; padding: 6px 4px; }
   .seg-hint { color: var(--muted); font-size: 12px; margin-bottom: 14px; min-height: 17px; }
   .sec { margin-bottom: 14px; }
@@ -108,6 +109,8 @@
 
 <main>
   <div class="col left">
+    <h2>Preset</h2>
+    <div class="seg" id="presets"></div>
     <h2>Feel</h2>
     <div id="feel"></div>
     <h2>Looks <span class="dirty" id="dirty"></span><span class="grow"></span>
@@ -139,6 +142,28 @@ const FEEL = [
   ['refraction_strength', 'Bend', 'How hard the thick edges bend what is behind'],
   ['chromatic_aberration', 'Rainbow', 'Colour split where the glass bends'],
   ['foot_alpha', 'Darkness', 'Terminal background: 0 = pure glass, 1 = solid'],
+];
+
+// Presets: one click sets the whole look (Feel, rim, lens and which effects
+// run). Clear = the shipped glass with less rainbow; tried side by side on a test terminal.
+const FX_OFF = { light_on: false, oil_on: false, parallax_on: false, glow_on: false, materialize_on: false, drift_on: false, liquid_on: false };
+const PRESETS = [
+  { name: 'Clear', hint: 'See-through glass with a strong bend and little rainbow',
+    set: { blur_strength: 0.2, refraction_strength: 4.5, chromatic_aberration: 0.8, foot_alpha: 0.25,
+           edge_thickness: 0.07, lens_distortion: 7.8, specular_strength: 3, fresnel_strength: 0.09, adaptive_dim: 0.3,
+           ...FX_OFF, light_on: true, parallax_on: true, glow_on: true, materialize_on: true } },
+  { name: 'Frosted', hint: 'Milky glass with a gentle bend. Calm and easy to read',
+    set: { blur_strength: 2.6, refraction_strength: 2, chromatic_aberration: 0.5, foot_alpha: 0.4,
+           edge_thickness: 0.08, lens_distortion: 3, specular_strength: 1.5, fresnel_strength: 0.6, adaptive_dim: 0.4,
+           ...FX_OFF, light_on: true, glow_on: true, materialize_on: true } },
+  { name: 'Subtle', hint: 'A mostly solid background, a faint bend, nothing moving. For focused work',
+    set: { blur_strength: 1.2, refraction_strength: 1.5, chromatic_aberration: 0.3, foot_alpha: 0.7,
+           edge_thickness: 0.05, lens_distortion: 1.5, specular_strength: 1, fresnel_strength: 0.3, adaptive_dim: 0.5,
+           ...FX_OFF } },
+  { name: 'Vivid', hint: 'The strongest bend and rainbow, with the light and oil effects on',
+    set: { blur_strength: 0.15, refraction_strength: 5, chromatic_aberration: 2.3, foot_alpha: 0.2,
+           edge_thickness: 0.09, lens_distortion: 7.8, specular_strength: 4.5, fresnel_strength: 1.2, adaptive_dim: 0.3,
+           ...FX_OFF, light_on: true, oil_on: true, parallax_on: true, glow_on: true, materialize_on: true, drift_on: true } },
 ];
 
 // Liquid Touch styles: each sets the whole feel at once (Strength and Brush size
@@ -395,7 +420,7 @@ function effectSwitch(fx) {
   bind(fx.action, () => setSwitch(sw, !!S[fx.action]));
   return sw;
 }
-const near = (a, b) => Math.abs(a - b) < 1e-3;
+const near = (a, b) => typeof b === 'boolean' ? !!a === b : Math.abs(a - b) < 1e-3;
 const styleNow = fx => fx.styles.find(st => Object.entries(st.set).every(([k, v]) => near(S[k], v)));
 
 // Style buttons: one sets every key in its `set`; the matching one stays lit
@@ -468,20 +493,12 @@ function effectView(pane, fx) {
   pane.appendChild(grid);
 }
 
-// Found by eye on a floating 1100x700 terminal: thick bending edge, low blur,
-// soft bright rim. Everything else stays where the sliders are.
-const APPLE = { blur_strength: 0.5, refraction_strength: 3, edge_thickness: 0.07, lens_distortion: 3,
-  chromatic_aberration: 1, fresnel_strength: 2, specular_strength: 3, foot_alpha: 0.25, adaptive_dim: 0.3,
-  foot_pad: 40, border_size: 1, rim_lit: 0.55, rim_side: 0.05, rim_far: 0.25 };
-
 function allView(pane) {
   pane.appendChild(head('All settings'));
   const tools = el('div', 'tools');
-  const apple = el('button', '', 'Load Apple-ish starting point');
-  apple.onclick = () => { Object.assign(S, APPLE); build(); push(); status('Apple-ish values loaded. Save to keep them.'); };
   const wall = el('button', '', 'Next wallpaper');
   wall.onclick = () => { fetch('/wallpaper', { method: 'POST', body: '{}' }); status('Next wallpaper'); };
-  tools.append(apple, wall);
+  tools.append(wall);
   pane.appendChild(tools);
   for (const sec of SECTIONS) {
     if (sec.edge && !META.edge) continue;     // plugin older than hyprglass v0.9.0
@@ -495,9 +512,25 @@ function allView(pane) {
   }
 }
 
+// the lit preset is the one every value still matches; none once a slider moves
+function presetRow() {
+  const box = $('presets'); box.innerHTML = '';
+  const matches = st => Object.entries(st.set).every(([k, v]) => near(S[k], v));
+  const refresh = () => { for (const b of box.children) b.classList.toggle('on', matches(PRESETS.find(p => p.name === b.textContent))); };
+  for (const st of PRESETS) {
+    const b = el('button', '', st.name);
+    explain(b, st.name, st.hint);
+    b.onclick = () => { Object.assign(S, st.set); build(); push(); status(`${st.name}: ${st.hint}`); };
+    box.appendChild(b);
+  }
+  for (const k of Object.keys(PRESETS[0].set)) bind(k, refresh);
+  refresh();
+}
+
 function build() {
   BOUND = {};
   setSwitch($('master'), !!S.glass_on);
+  presetRow();
   const feel = $('feel'); feel.innerHTML = '';
   for (const [k, label, hint] of FEEL) feel.appendChild(sliderRow(k, label, hint, { showHint: true }));
   const pane = $('pane'); pane.innerHTML = '';
