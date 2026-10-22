@@ -734,33 +734,99 @@ def wait_title(title, secs=6, key="title"):
     return None
 
 
-def float_center(addr, w, h, right=False):
+# The Tuner is wide and short and sits along the bottom of the screen; the test
+# window opens in the space above it, so you see the glass while you tune.
+TUNER_W, TUNER_H, GAP = 980, 560, 16
+TEST_CLASS = "org.omarchy.glass-test"
+
+
+def work_area():
+    """The free part of the focused monitor (minus bar and dock), in global logical px."""
     mon = json.loads(subprocess.run(["hyprctl", "activeworkspace", "-j"], capture_output=True, text=True).stdout)
     mons = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout)
     m = next((m for m in mons if m["id"] == mon.get("monitorID")), mons[0])
     mw, mh = int(m["width"] / m["scale"]), int(m["height"] / m["scale"])
-    w, h = min(w, mw - 48), min(h, mh - 48)   # fit short or scaled screens (e.g. a 4K TV at 2.5x is 864 tall)
-    x, y = m["x"] + (mw - w) // 2, m["y"] + (mh - h) // 2
-    if right:   # tuner docks to the right edge so it never covers the test window
-        x = m["x"] + mw - w - 24
+    if m.get("transform", 0) % 2:   # rotated 90 or 270
+        mw, mh = mh, mw
+    left, top, right, bottom = (m.get("reserved") or [0, 0, 0, 0])[:4]
+    return m["x"] + left, m["y"] + top, mw - left - right, mh - top - bottom
+
+
+def place(addr, x, y, w, h):
     sel = f'window = "address:{addr}"'
     dsp(f'hl.dsp.window.float({{ action = "enable", {sel} }})')
-    dsp(f"hl.dsp.window.resize({{ x = {w}, y = {h}, {sel} }})")
-    dsp(f"hl.dsp.window.move({{ x = {x}, y = {y}, {sel} }})")
+    # a window that has only just opened can still apply its own first size
+    # over ours, so check where it ended up and try again
+    for _ in range(4):
+        dsp(f"hl.dsp.window.resize({{ x = {w}, y = {h}, {sel} }})")
+        dsp(f"hl.dsp.window.move({{ x = {x}, y = {y}, {sel} }})")
+        time.sleep(0.25)
+        c = next((c for c in clients() if c.get("address") == addr), None)
+        if not c or (c["at"] == [x, y] and c["size"] == [w, h]):
+            return
 
 
-TEST_CLASS = "org.omarchy.glass-test"
+def place_tuner(addr):
+    ax, ay, aw, ah = work_area()
+    w, h = min(TUNER_W, aw - 2 * GAP), min(TUNER_H, ah - 2 * GAP)   # fit short or scaled screens
+    place(addr, ax + (aw - w) // 2, ay + ah - h - GAP, w, h)
+
+
+def place_test(addr):
+    """Above the Tuner, as wide as it, when there is room; else centred."""
+    ax, ay, aw, ah = work_area()
+    tuner = next((c for c in clients() if c.get("title") == TITLE), None)
+    if tuner:
+        (tx, ty), (tw, _) = tuner["at"], tuner["size"]
+        room = ty - GAP - (ay + GAP)
+        if room >= 240 and ay <= ty <= ay + ah:
+            return place(addr, tx, ay + GAP, tw, room)
+    w, h = min(1100, aw - 2 * GAP), min(700, ah - 2 * GAP)
+    place(addr, ax + (aw - w) // 2, ay + (ah - h) // 2, w, h)
+
+
+# the test window this Tuner opened ("opening" until it shows up)
+_TEST = {"addr": None, "opening": False}
+
+
+def test_open():
+    a = _TEST["addr"]
+    return _TEST["opening"] or (bool(a) and any(c.get("address") == a for c in clients()))
+
+
+def close_test():
+    a, _TEST["addr"] = _TEST["addr"], None
+    if a and any(c.get("address") == a for c in clients()):
+        dsp(f'hl.dsp.window.close({{ window = "address:{a}" }})')
 
 
 def test_window(pad):
-    subprocess.Popen(
-        ["uwsm-app", "--", "foot", f"--app-id={TEST_CLASS}", f"--override=pad={pad}x{pad}",
-         "sh", "-c", "fastfetch; exec ${SHELL:-bash}"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )
-    c = wait_title(TEST_CLASS, key="class")
-    if c:
-        float_center(c["address"], 1100, 700)
+    _TEST["opening"] = True
+    try:
+        before = {c["address"] for c in clients() if c.get("class") == TEST_CLASS}
+        subprocess.Popen(
+            ["uwsm-app", "--", "foot", f"--app-id={TEST_CLASS}", f"--override=pad={pad}x{pad}",
+             "sh", "-c", "fastfetch; exec ${SHELL:-bash}"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        for _ in range(60):
+            c = next((c for c in clients() if c.get("class") == TEST_CLASS and c["address"] not in before), None)
+            if c:
+                _TEST["addr"] = c["address"]
+                place_test(c["address"])
+                return c["address"]
+            time.sleep(0.1)
+    finally:
+        _TEST["opening"] = False
+
+
+def toggle_test(pad):
+    """Open the test window, or close it if it's open. Returns whether it is open now."""
+    if test_open():
+        close_test()
+        return False
+    threading.Thread(target=test_window, args=(pad,), daemon=True).start()
+    return True
 
 
 def next_wallpaper():
@@ -897,7 +963,7 @@ class H(BaseHTTPRequestHandler):
         elif self.path == "/state":
             meta = {"glass": {**GLASS, **LIGHT, **EDGE, **LIQUID}, "look": LOOK, "defaults": defaults(),
                     "light": light_supported(), "edge": edge_supported(), "liquid": liquid_supported()}
-            self.send(200, json.dumps({"state": load_state(), "meta": meta}))
+            self.send(200, json.dumps({"state": load_state(), "meta": meta, "test": test_open()}))
         else:
             self.send(404, "{}")
 
@@ -946,8 +1012,7 @@ class H(BaseHTTPRequestHandler):
         elif self.path == "/revert":
             self.send(200, json.dumps({"state": revert()}))
         elif self.path == "/test-window":
-            threading.Thread(target=test_window, args=(s["foot_pad"],), daemon=True).start()
-            self.send(200, "{}")
+            self.send(200, json.dumps({"open": toggle_test(s["foot_pad"])}))
         elif self.path == "/wallpaper":
             next_wallpaper()
             self.send(200, "{}")
@@ -969,10 +1034,13 @@ def open_window():
     if not c:
         return
     addr = c["address"]
-    float_center(addr, 460, 940, right=True)
-    # quit once the window is gone
+    place_tuner(addr)
+    if test_window(load_state()["foot_pad"]):    # the glass to look at while you tune
+        dsp(f'hl.dsp.focus({{ window = "address:{addr}" }})')
+    # quit once the window is gone, and take the test window with it
     while any(x.get("address") == addr for x in clients()):
         time.sleep(1.5)
+    close_test()
     os._exit(0)
 
 

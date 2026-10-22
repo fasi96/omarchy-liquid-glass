@@ -49,7 +49,7 @@ Setup lists everything it will do and asks first; without a terminal to ask in i
 
 ## Glass Tuner
 
-The Tuner opens on what matters most: four **Feel** sliders (Frost, Bend, Rainbow, Darkness), then **Effects**, one line each with its switch and main slider (click a name for the rest). Everything else is folded under **Fine-tune everything**:
+The Tuner is one wide window along the bottom of the screen, with a test terminal above it so you see the glass while you tune (closing the Tuner closes it too). On the left are four **Feel** sliders (Frost, Bend, Rainbow, Darkness) and your saved **Looks**. On the right are the **Effects**, each with its on/off switch; click one for its settings. **All settings** at the end of that list holds everything else:
 
 | Section | What it's for |
 |---|---|
@@ -60,7 +60,7 @@ The Tuner opens on what matters most: four **Feel** sliders (Frost, Bend, Rainbo
 | Outer line | A thin lit lip around windows (or the neon gradient) |
 | Effects | Liquid Touch (Calm / Flowing / Wild), Light follows you, Oil film, Parallax tilt, Click glow, Materialize, Drift. Each has its own on/off switch |
 
-Changes show live; nothing sticks until you press **Save**. Use **Hold to compare** to see the glass off, **Open test window** to try it on a floating terminal, and **Saved looks** to keep several setups. The shipped look is saved as "Liquid Glass".
+Changes show live; nothing sticks until you press **Save**. Use **Hold to compare** to see the glass off, **Test window** to hide or bring back the test terminal, and **Looks** to keep several setups. Hover a control to see what it does. The shipped look is saved as "Liquid Glass".
 
 ## Uninstall
 
