@@ -16,12 +16,14 @@ Apple-style Liquid Glass for your terminal on [Omarchy](https://omarchy.org): th
 - **Click glow** and **materialize**: clicks energize the glass; new windows bend into existence.
 - **Glass Tuner**: a small app with live sliders for all of it, named looks you can save and switch, and terminal text settings that follow your Omarchy theme.
 
-It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux, through the [**HyprGlass Liquid**](https://github.com/fasi96/hyprglass) fork that adds the motion.
+It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux (v0.11.0 on Hyprland 0.56.2, v1.0.0 on 0.57.0), through the [**HyprGlass Liquid**](https://github.com/fasi96/hyprglass) fork that adds the motion.
+
+New in 1.7: Hyprland 0.57 support, and everything HyprGlass added since 0.9 comes along, like glass on rotated screens, faster startup, and the plugin pausing instead of crashing on a Hyprland it wasn't built for.
 
 ## Requirements
 
 - Dependencies: `hyprpm` (its own Arch package since Hyprland 0.56.2-4) and `base-devel cmake meson cpio pkgconf git`, all installed for you if missing, `python3`, `jq`, `chromium` for the tuner window, `foot`.
-- Omarchy with **Hyprland 0.56.2**. That's the tested version; others may not build yet.
+- Omarchy with **Hyprland 0.56.2 or 0.57.0**. Those are the tested versions; others may not build yet.
 - **foot** as your terminal (Omarchy's default). The glass shows through see-through windows, and Glass Tuner's terminal settings are for foot.
 - A few minutes for `hyprpm` to build the plugin the first time. It asks for your password to install build tools and Hyprland headers.
 
@@ -81,6 +83,8 @@ omarchy plugin remove io.github.fasi96.liquid-glass
 ## After a Hyprland update
 
 Hyprland plugins are compiled for one Hyprland version, so after an update the glass switches off until it's rebuilt. The bar button shows `!`; click it, or run `./install.sh --plugin-only`. Nothing else breaks meanwhile.
+
+The pinned plugin commit carries one reviewed build for each tested Hyprland (0.56.2 and 0.57.0), and the rebuild picks the one for the Hyprland you're running. So when Omarchy moves to 0.57, a rebuild is all it takes.
 
 ## What gets built, and what gets changed
 

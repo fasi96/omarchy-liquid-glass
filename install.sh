@@ -31,10 +31,10 @@ DESKTOP="$HOME/.local/share/applications/omarchy-liquid-glass-tuner.desktop"
 MANIFEST="$CONF/installed.sha256"   # "sha256  path" of every file we install; uninstall.sh only removes exact matches
 HYPRPM_DIR="${HYPRPM_CACHE:-/var/cache/hyprpm/$USER}"
 PLUGIN_REPO="https://github.com/fasi96/hyprglass"
-HYPRGLASS_REV="fabe035ba05561ed960f48ef4458b9ca9ebccb24"   # reviewed plugin commit; bump deliberately
+HYPRGLASS_REV="8e50998b7cc99afd5b26b1c2e0679bc45967cd1b"   # reviewed plugin commit; bump deliberately
 PLUGIN_SRC="$DEST/hyprglass-src"
 BUILD_PKGS=(base-devel cmake meson cpio pkgconf git)
-TESTED_HYPRLAND="0.56.2"
+TESTED_HYPRLAND="0.56.2 0.57.0"   # each has its own reviewed commit in the fork's hyprpm.toml
 BEGIN="omarchy-liquid-glass >>>"
 END="<<< omarchy-liquid-glass"
 
@@ -101,7 +101,7 @@ done
 [ -d "${OMARCHY_PATH:-/usr/share/omarchy}" ] || warn "Omarchy not found: the config hooks assume Omarchy's layout (~/.config/hypr/*.lua with the o helper)"
 
 ver=$(hyprctl version -j | jq -r .tag | sed 's/^v//')
-[ "$ver" = "$TESTED_HYPRLAND" ] || warn "Hyprland $ver: tested on $TESTED_HYPRLAND only; the plugin may not build on other versions"
+case " $TESTED_HYPRLAND " in *" $ver "*) ;; *) warn "Hyprland $ver: tested on ${TESTED_HYPRLAND// / and } only; the plugin may not build on other versions" ;; esac
 if [ -z "${LG_PLUGIN_ONLY:-}" ]; then
     term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
     case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
