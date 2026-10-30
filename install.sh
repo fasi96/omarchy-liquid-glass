@@ -271,9 +271,12 @@ plugin_step() {
     fi
 
     say "hyprpm: building HyprGlass Liquid ${HYPRGLASS_REV:0:12}"
-    hyprpm add "$PLUGIN_SRC" "$HYPRGLASS_REV" || { restore_removed; die "building HyprGlass Liquid failed"; }
+    # no revision argument: the local copy's HEAD is exactly HYPRGLASS_REV, and hyprpm only reads the
+    # manifest's commit_pins (the build for this Hyprland, all in HYPRGLASS_REV's history) when given none
+    hyprpm add "$PLUGIN_SRC" || { restore_removed; die "building HyprGlass Liquid failed"; }
     echo HyprGlassLiquid > "$CONF/hyprpm-repo"      # ownership record, checked by owns_repo / uninstall.sh
-    hyprpm enable hyprglass
+    # hyprpm add succeeds even when the build fails; enabling is where that shows
+    hyprpm enable hyprglass || die "HyprGlass Liquid didn't build for Hyprland $(hyprctl version -j | jq -r .tag); run 'hyprpm update -v' to see the compiler output"
     hyprpm reload -n
 }
 
