@@ -8,7 +8,7 @@ Apple-style Liquid Glass for your terminal on [Omarchy](https://omarchy.org): th
 
 ## What you get
 
-- **Glass terminals**: foot gets a see-through background, and the glass plugin turns what's behind it into frosted, refracting glass with a thick, curved rim.
+- **Glass terminals**: foot, Ghostty, kitty and Alacritty get a see-through background, and the glass plugin turns what's behind it into frosted, refracting glass with a thick, curved rim.
 - **Light that follows you**: a light source over your desktop lights each window's rim where it faces it. Move a window or your pointer and the highlight slides round the rim.
 - **Parallax tilt**: the view behind the glass shifts as your cursor moves, like tilting thick glass.
 - **Oil film**: slow iridescent swirls on the glass, like oil on water.
@@ -22,9 +22,9 @@ New in 1.7: Hyprland 0.57 support, and everything HyprGlass added since 0.9 come
 
 ## Requirements
 
-- Dependencies: `hyprpm` (its own Arch package since Hyprland 0.56.2-4) and `base-devel cmake meson cpio pkgconf git`, all installed for you if missing, `python3`, `jq`, `chromium` for the tuner window, `foot`.
+- Dependencies: `hyprpm` (its own Arch package since Hyprland 0.56.2-4) and `base-devel cmake meson cpio pkgconf git`, all installed for you if missing, `python3`, `jq`, `chromium` for the tuner window.
 - Omarchy with **Hyprland 0.56.2 or 0.57.0**. Those are the tested versions; others may not build yet.
-- **foot** as your terminal (Omarchy's default). The glass shows through see-through windows, and Glass Tuner's terminal settings are for foot.
+- **foot, Ghostty, kitty or Alacritty** as your terminal. The glass shows through see-through windows, so Glass Tuner writes the transparency into the terminals it finds on your machine: everything (transparency, padding, text colour, font weight, bold-in-bright) for foot, and the see-through background for the other three — without one, the window is fully opaque and the plugin skips it, silently. If you set a terminal's opacity yourself, the tuner leaves that terminal to you.
 - A few minutes for `hyprpm` to build the plugin the first time. It asks for your password to install build tools and Hyprland headers.
 
 ## Install
@@ -93,8 +93,8 @@ The pinned plugin commit carries one reviewed build for each tested Hyprland (0.
 - **Glass Tuner only listens to itself.** Its local page (127.0.0.1) needs a random per-run token that only the tuner window gets (handed over through a private launch file, never on a command line where other users could see it), checks the Host and Origin, and every value is range-checked before it reaches the generated config.
 - **Uninstall only deletes what it installed.** The installer records a sha256 of every file it installs (Glass Tuner, the desktop entry, the hooks), and Glass Tuner records one each time it writes `liquid_glass.lua`. `./uninstall.sh` removes a file only if it still matches; anything you changed or added is kept and listed. The pinned plugin source is removed only if git shows it is still exactly the pinned commit. If one of these paths already held something else at install time, the installer keeps a copy in its backup folder first.
 - **Other hyprpm plugins are left alone.** `hyprpm update` (needed only when hyprpm's headers don't match your Hyprland) also updates every other hyprpm plugin, so setup skips it when the headers are current, and otherwise names your other plugins and asks first (`--hyprpm-update` answers yes).
-- **Blocks you edit stay yours.** Every fenced block Liquid Glass writes (in hyprland.lua, autostart.lua, bindings.lua and foot.ini) is recorded by sha256. Uninstall removes a block only if it is still exactly what Liquid Glass wrote; if you changed it, it stays and is listed. Rewriting a block you changed (reinstall, or a Glass Tuner save) keeps a copy of your version in the backup folder first. Glass Tuner's browser profile in `~/.cache/omarchy-liquid-glass` is only deleted if you say yes.
-- **Your foot config is only ever appended to.** Everything Glass Tuner sets (transparency, padding, text colour, font weight, bold-in-bright) lives in one fenced `omarchy-liquid-glass` block at the end of `foot.ini`; foot lets later values win, so your own lines are never edited. The Hyprland files get fenced blocks the same way. `./uninstall.sh` removes exactly those blocks.
+- **Blocks you edit stay yours.** Every fenced block Liquid Glass writes (in hyprland.lua, autostart.lua, bindings.lua, foot.ini and the other managed terminal configs) is recorded by sha256. Uninstall removes a block only if it is still exactly what Liquid Glass wrote; if you changed it, it stays and is listed. Rewriting a block you changed (reinstall, or a Glass Tuner save) keeps a copy of your version in the backup folder first. Glass Tuner's browser profile in `~/.cache/omarchy-liquid-glass` is only deleted if you say yes.
+- **Your foot config is only ever appended to.** Everything Glass Tuner sets (transparency, padding, text colour, font weight, bold-in-bright) lives in one fenced `omarchy-liquid-glass` block at the end of `foot.ini`; foot lets later values win, so your own lines are never edited. Ghostty and kitty get their own fenced block (same rules); Alacritty's config is TOML, where a key may appear only once, so there the tuner manages one marked `background_opacity` line and nothing else. The Hyprland files get fenced blocks the same way. `./uninstall.sh` removes exactly those.
 
 ## Credits
 

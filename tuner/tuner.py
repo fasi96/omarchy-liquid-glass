@@ -6,8 +6,9 @@ Serves a small control page on 127.0.0.1 and opens it as a floating chromium
 app window. Every slider change is pushed to Hyprland straight away with
 `hyprctl eval`; foot's transparency is pushed to every open foot window with an
 OSC 11 escape. Nothing touches your config until you press Save, which writes
-~/.config/hypr/liquid_glass.lua and the managed lines in ~/.config/foot/foot.ini.
-The server quits when the tuner window is closed.
+~/.config/hypr/liquid_glass.lua, the managed lines in ~/.config/foot/foot.ini,
+and the see-through background for Ghostty, kitty and Alacritty when you use
+them. The server quits when the tuner window is closed.
 """
 
 import configparser
@@ -162,6 +163,27 @@ LIQUID = {
 }
 # Text in foot (applies to terminals, not the glass plugin)
 FONT_WEIGHTS = ["regular", "medium", "semibold", "bold"]
+
+# Other terminals Omarchy tags as terminals. foot gets the full treatment
+# (alpha, text colour, pad, font weight, bold-in-bright) because all of those
+# exist there and `hyprctl eval` can push colours live; these only need the
+# see-through background for the glass to have anything to refract at all.
+# Each gets ONE fenced block at the end of its config, same pattern as foot
+# (later values win in both), recorded in blocks.sha256 so uninstall removes
+# only ours. A terminal whose config already sets its opacity key is left
+# alone: your own setting wins, we print a note instead of fighting you.
+GHOSTTY_CONF = os.path.join(HOME, ".config/ghostty/config")
+KITTY_CONF = os.path.join(HOME, ".config/kitty/kitty.conf")
+ALACRITTY_CONF = os.path.join(HOME, ".config/alacritty/alacritty.toml")
+# (path, comment prefix, key regex for a setting of yours, the block we write,
+#  and how to reload the terminal's config after writing it; Ghostty watches
+#  its config by itself)
+TERMINALS = [
+    (GHOSTTY_CONF, "#", r"(?m)^background-opacity\s*=",
+     "background-opacity = {alpha}", None),
+    (KITTY_CONF, "#", r"(?m)^background_opacity(?:\s*=|\s)",
+     "background_opacity {alpha}", ["pkill", "-USR1", "-x", "kitty"]),
+]
 
 LOOK = {
     "text_boost":  (0.0, 1.0, 0.35),     # theme text colour blended toward white (0 = theme colour)
@@ -537,6 +559,98 @@ def push_foot_alpha(alpha, background=None):
             pass
 
 
+def _note_user_setting(name):
+    print(f"{name}: you set its opacity yourself, so Glass Tuner leaves it to you "
+          f"(it still shows the glass while your value is below 1)")
+
+
+def _update_terminal(path, prefix, key_re, line, reload_cmd, s, create):
+    """One fenced opacity block in a foot-like config file (Ghostty, kitty).
+    Only files that already exist are touched (no configs are created for
+    terminals you don't use), and your own opacity setting is never overridden:
+    if one exists outside our block we drop ours instead."""
+    if not os.path.exists(path) or not blocks:
+        return
+    before = open(path).read()
+    ours = blocks.pattern(prefix).search(before)
+    rest = blocks.pattern(prefix).sub("", before)
+    if re.search(key_re, rest):
+        if ours:
+            blocks.remove(path, prefix)      # get out of the way; yours rules
+        else:
+            _note_user_setting(os.path.basename(os.path.dirname(path)))
+    elif not s["glass_on"]:
+        if ours:
+            blocks.remove(path, prefix)
+    elif ours or create:
+        backup = os.path.join(CONF_DIR, "backup-" + time.strftime("%Y%m%d-%H%M%S"))
+        blocks.add(path, prefix, line.format(alpha=s["foot_alpha"]), backup)
+    if reload_cmd and open(path).read() != before:
+        subprocess.run(reload_cmd, capture_output=True)
+
+
+# Alacritty's config is TOML, where a key may appear only once, so there is no
+# safe block to append: we manage exactly one marked line instead. Yours (if you
+# have one) is left alone; ours carries a trailing marker comment.
+ALACRITTY_OURS = r"(?m)^background_opacity\s*=\s*[^#\n]*#\s*omarchy-liquid-glass\s*\n?"
+
+
+def _update_alacritty(s, create):
+    if not os.path.exists(ALACRITTY_CONF) or not blocks:
+        return
+    import tomllib
+    original = open(ALACRITTY_CONF).read()
+    rest = re.sub(ALACRITTY_OURS, "", original, count=1)
+    try:
+        tomllib.loads(rest)
+    except (OSError, tomllib.TOMLDecodeError):
+        return                                # not valid TOML: nothing we do is safe here
+    if re.search(r"(?m)^background_opacity\s*=", rest):
+        _note_user_setting("Alacritty")
+        return
+    if not s["glass_on"] or (not create and not re.search(ALACRITTY_OURS, original)):
+        if rest != original:
+            write_atomic(ALACRITTY_CONF, rest)
+        return
+    line = f"background_opacity = {s['foot_alpha']}  # omarchy-liquid-glass"
+    m = re.search(r"(?m)^\[general\]\s*\n", rest)
+    if m:                                     # in an existing [general] table
+        new = rest[:m.end()] + line + "\n" + rest[m.end():]
+    elif re.search(r"(?m)^\[", rest):         # tables only: top-level must come first
+        new = line + "\n\n" + rest.lstrip("\n")
+    else:
+        # no tables at all: top-level scope, append at the end (or a blank file)
+        new = (rest.rstrip("\n") + "\n" if rest.strip() else "") + line + "\n"
+    try:
+        tomllib.loads(new)
+    except tomllib.TOMLDecodeError:
+        return                                # never leave a config that doesn't parse
+    write_atomic(ALACRITTY_CONF, new)
+
+
+def _update_terminals(s, create):
+    """The see-through background for every managed terminal except foot."""
+    for path, prefix, key_re, line, reload_cmd in TERMINALS:
+        _update_terminal(path, prefix, key_re, line, reload_cmd, s, create)
+    _update_alacritty(s, create)
+
+
+def remove_terminal_settings():
+    """Uninstall: drop the opacity we manage in every terminal except foot."""
+    for path, prefix, _, _, _ in TERMINALS:
+        if os.path.exists(path) and blocks:
+            blocks.remove(path, prefix)
+    if os.path.exists(ALACRITTY_CONF) and blocks:
+        try:
+            text = open(ALACRITTY_CONF).read()
+        except OSError:
+            return
+        ours = re.sub(ALACRITTY_OURS, "", text, count=1)
+        if ours != text:
+            blocks.record(ALACRITTY_CONF, None)
+            write_atomic(ALACRITTY_CONF, ours)
+
+
 # ---------------- apply / save ----------------
 
 _last_alpha = [None]
@@ -701,6 +815,7 @@ def _save(s, persist):
     write_atomic(os.path.join(CONF_DIR, "generated.sha256"), f"{hashlib.sha256(lua.encode()).hexdigest()}  {LUA_FILE}\n")
 
     _update_foot(s, create=persist)           # a Save (re)creates the foot block; hooks only update it
+    _update_terminals(s, create=persist)      # same for Ghostty, kitty and Alacritty
 
     subprocess.run(["hyprctl", "reload"], capture_output=True)
     errs = subprocess.run(["hyprctl", "configerrors"], capture_output=True, text=True).stdout.strip()
@@ -1091,6 +1206,7 @@ def theme_hook():
     else:
         with _Lock():
             _update_foot(s, create=False)
+            _update_terminals(s, create=False)
     sync_foot(s, force=True)
 
 
@@ -1140,7 +1256,10 @@ def main():
     if "--foot-sync" in sys.argv:     # font-set hook
         with _Lock():
             _update_foot(load_state(), create=False)
+            _update_terminals(load_state(), create=False)
         return
+    if "--terminal-remove" in sys.argv:   # uninstall: drop what we manage in non-foot terminals
+        return remove_terminal_settings()
     if "--legacy-foot" in sys.argv:   # install/uninstall: undo the pad= edit versions before 1.1 made
         return legacy_foot()
     if "--toggle" in sys.argv:        # bar button: glass on/off, saved so it sticks
