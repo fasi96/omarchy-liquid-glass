@@ -99,12 +99,17 @@ done
 [ -n "${LG_PLUGIN_ONLY:-}" ] || for c in chromium foot; do command -v "$c" >/dev/null || die "missing: $c"; done
 [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] || die "run this inside your Hyprland session"
 [ -d "${OMARCHY_PATH:-/usr/share/omarchy}" ] || warn "Omarchy not found: the config hooks assume Omarchy's layout (~/.config/hypr/*.lua with the o helper)"
+if [ -z "${LG_SKIP_PLUGIN:-}" ] && [ -e "$HYPRPM_DIR" ] && [ ! -w "$HYPRPM_DIR" ]; then
+    die "$HYPRPM_DIR is not writable by you (owned by $(stat -c %U "$HYPRPM_DIR")); hyprpm builds would fail. To fix it: sudo chown -R \"$USER\" \"$HYPRPM_DIR\""
+fi
 
 ver=$(hyprctl version -j | jq -r .tag | sed 's/^v//')
 case " $TESTED_HYPRLAND " in *" $ver "*) ;; *) warn "Hyprland $ver: tested on ${TESTED_HYPRLAND// / and } only; the plugin may not build on other versions" ;; esac
 if [ -z "${LG_PLUGIN_ONLY:-}" ]; then
     term=$(xdg-terminal-exec --print-id 2>/dev/null || true)
-    case "$term" in *foot*) ;; *) warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner's terminal settings are for foot" ;; esac
+    case "$term" in *foot*|*ghostty*|*kitty*|*alacritty*) ;; *)
+        warn "your default terminal is '${term:-unknown}': the glass shows through see-through windows, and Glass Tuner manages transparency for foot, Ghostty, kitty and Alacritty"
+    ;; esac
 fi
 
 # build tools hyprpm needs that aren't installed yet
@@ -124,7 +129,7 @@ summary() {
     [ -z "${LG_SKIP_PLUGIN:-}" ] && echo "  - build HyprGlass Liquid ${HYPRGLASS_REV:0:12} with hyprpm and load it (hyprpm asks for your password at each step, so a few times)"
     if [ -z "${LG_PLUGIN_ONLY:-}" ]; then
         echo "  - write ~/.config/hypr/liquid_glass.lua, and add fenced blocks to hyprland.lua, autostart.lua and bindings.lua"
-        echo "  - add a fenced block at the end of ~/.config/foot/foot.ini (your own lines are not edited)"
+        echo "  - add a fenced block at the end of ~/.config/foot/foot.ini (your own lines are not edited), and the see-through background for Ghostty, kitty or Alacritty when their configs exist"
         echo "  - install Glass Tuner in ~/.local/share/omarchy-liquid-glass, its desktop entry, and theme-set/font-set hooks"
         echo "Copies of hyprland.lua, bindings.lua, autostart.lua and foot.ini, and of anything already at the paths"
         echo "above that Liquid Glass didn't install, go to ~/.config/omarchy-liquid-glass/backup-<time>/ first."
@@ -263,18 +268,31 @@ plugin_step() {
     echo "$HYPRGLASS_REV" > "$CONF/plugin-rev"      # the source is ours only while it is still exactly this
 
     local entry
-    for entry in "${REMOVE_REPOS[@]}"; do say "hyprpm: removing ${entry%%$'\t'*}"; hyprpm remove "${entry%%$'\t'*}"; done
+    for entry in "${REMOVE_REPOS[@]}"; do
+        say "hyprpm: removing ${entry%%$'\t'*}"
+        hyprpm remove "${entry%%$'\t'*}" \
+            || die "could not remove '${entry%%$'\t'*}' from hyprpm; if /var/cache/hyprpm/$USER isn't writable by you, fix that first: sudo chown -R \"$USER\" \"${HYPRPM_CACHE:-/var/cache/hyprpm/$USER}\""
+    done
 
     if [ -n "$NEED_HEADERS" ]; then
         say "hyprpm: fetching Hyprland headers (can take a few minutes)"
         hyprpm update || { restore_removed; die "hyprpm update failed"; }
     fi
 
-    say "hyprpm: building HyprGlass Liquid ${HYPRGLASS_REV:0:12}"
-    hyprpm add "$PLUGIN_SRC" "$HYPRGLASS_REV" || { restore_removed; die "building HyprGlass Liquid failed"; }
+    say "hyprpm: building HyprGlass Liquid for this Hyprland (pin-resolved)"
+    # Add without naming a revision: hyprpm then reads commit_pins from this
+    # repo's hyprpm.toml (whose contents the pinned fetch above verified) and
+    # resets to the fork commit that matches the running Hyprland before
+    # building. Naming HYPRGLASS_REV here instead builds it on every Hyprland
+    # version, which fails wherever its header paths differ.
+    hyprpm add "$PLUGIN_SRC" || { restore_removed; die "building HyprGlass Liquid failed"; }
     echo HyprGlassLiquid > "$CONF/hyprpm-repo"      # ownership record, checked by owns_repo / uninstall.sh
-    hyprpm enable hyprglass
+    hyprpm enable hyprglass || { restore_removed; die "could not enable hyprglass"; }
     hyprpm reload -n
+    # add/enable can exit 0 even when the build failed; check Hyprland actually
+    # loaded the plugin so a failed build never looks like a success
+    hyprctl plugin list | grep -q 'Plugin hyprglass' \
+        || { restore_removed; die "hyprglass built but did not load; re-run in a terminal to see hyprpm's error"; }
 }
 
 if [ -n "${LG_SKIP_PLUGIN:-}" ]; then say "LG_SKIP_PLUGIN set: skipping the plugin step (testing)"; else

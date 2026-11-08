@@ -76,7 +76,9 @@ BarWidget {
   function q(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'" }   // shell-quote
 
   function terminal(cmd) {
-    Util.execArgv(["omarchy-launch-floating-terminal-with-presentation", cmd])
+    // keep the window open when the installer fails, so the error can be read and copied
+    Util.execArgv(["omarchy-launch-floating-terminal-with-presentation",
+                   cmd + "; s=$?; [ $s -eq 0 ] || { echo; echo \"the installer failed (exit $s), press Enter to close\"; read -r; }"])
   }
 
   function clicked(b) {

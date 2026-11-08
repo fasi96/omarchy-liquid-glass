@@ -60,6 +60,8 @@ TUNER_PY="$HERE/tuner/tuner.py"; [ -f "$TUNER_PY" ] || TUNER_PY="$DEST/tuner/tun
 if [ -s "$CONF/foot-pad.orig" ] && [ -f "$TUNER_PY" ]; then
     python3 "$TUNER_PY" --legacy-foot || true
 fi
+# non-foot terminals: Glass Tuner manages only their see-through background; drop ours
+if [ -f "$TUNER_PY" ]; then python3 "$TUNER_PY" --terminal-remove || true; fi
 
 # ---------------------------------------------------------------- files
 # Removed only if they are still exactly what we installed or generated
