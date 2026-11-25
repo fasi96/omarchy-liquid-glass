@@ -18,7 +18,7 @@ Apple-style Liquid Glass for your terminal on [Omarchy](https://omarchy.org): th
 
 It's built on [**HyprGlass**](https://github.com/hyprnux/hyprglass) by hyprnux (v0.11.0 on Hyprland 0.56.2, v1.0.0 on 0.57.0), through the [**HyprGlass Liquid**](https://github.com/fasi96/hyprglass) fork that adds the motion.
 
-New in 1.7: Hyprland 0.57 support, and everything HyprGlass added since 0.9 comes along, like glass on rotated screens, faster startup, and the plugin pausing instead of crashing on a Hyprland it wasn't built for.
+New in 1.7: Hyprland 0.57 support, and everything HyprGlass added since 0.9 comes along, like glass on rotated screens, faster startup, and the plugin pausing instead of crashing on a Hyprland it wasn't built for. 1.7.1 fixes setup on Hyprland 0.56.2, where 1.7.0 tried to build the 0.57 plugin and failed.
 
 ## Requirements
 

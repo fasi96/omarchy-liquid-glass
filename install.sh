@@ -263,7 +263,10 @@ plugin_step() {
     echo "$HYPRGLASS_REV" > "$CONF/plugin-rev"      # the source is ours only while it is still exactly this
 
     local entry
-    for entry in "${REMOVE_REPOS[@]}"; do say "hyprpm: removing ${entry%%$'\t'*}"; hyprpm remove "${entry%%$'\t'*}"; done
+    for entry in "${REMOVE_REPOS[@]}"; do
+        say "hyprpm: removing ${entry%%$'\t'*}"
+        hyprpm remove "${entry%%$'\t'*}" || die "hyprpm could not remove '${entry%%$'\t'*}' (its own message is above); nothing was built"
+    done
 
     if [ -n "$NEED_HEADERS" ]; then
         say "hyprpm: fetching Hyprland headers (can take a few minutes)"
